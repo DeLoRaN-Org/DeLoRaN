@@ -84,30 +84,23 @@ impl BlockchainExeClient {
         //println!("peer {}", peer_args.join(" "));
         //return Err("abbalabba".to_owned());
 
-        let before = Instant::now();
+        //let before = Instant::now();
         let output = Command::new("peer").args(peer_args).output().await.map_err(|e| e.to_string())?;
-        let after = Instant::now();
+        //let after = Instant::now();
         
-        {
-            let mut file = OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open("/root/API_invoke_times.csv")
-            .expect("Failed to open file");
-            writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
-        }
+        //{
+        //    let mut file = OpenOptions::new()
+        //    .append(true)
+        //    .create(true)
+        //    .open("/root/API_invoke_times.csv")
+        //    .expect("Failed to open file");
+        //    writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
+        //}
 
-        //let output = child.wait_with_output().await.map_err(|e| e.to_string())?;
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        //println!("Output: {}", stdout);
-        //println!("Stderr: {}", stderr);
-        //println!("Stdout: {:?}", stdout);
-        //println!("LastLineError: {:?}", stderr.take_last_line());
-
         
         if invoke || stdout.is_empty() && !stderr.is_empty() {
-            //\"msg\":\"Chaincode invoke successful. result: status:200 payload:\\\"{\\\\\\\"content\\\\\\\":null}\\\"ù
             let last_stderr_line = stderr.take_last_line().ok_or("Stderr empty".to_owned())?;
             let ans = serde_json::from_str::<HyperledgerInvokeAns>(&last_stderr_line).or::<String>(Ok(HyperledgerInvokeAns {
                 level: "".to_owned(),
