@@ -1,0 +1,10 @@
+The network detecting a replay attack may take additional measures, such as reducing the NbTrans parameter to 1, or discarding uplink frames that are received over a channel that was already used by an earlier transmission of the same frame, or by some other unspecified mechanism
+
+encryption: AES128
+
+The Network Server SHALL compute the max FRMPayload size available for answering MAC commands as follow: If the latest uplink ADR bit is 0: The max payload size corresponding to the lowest data rate MUST be considered; If the latest uplink ADR bit is set to 1: The max payload size corresponding to the data rate used for the last uplink of the device MUST be considered
+
+The length of a MAC command is not explicitly given and must be implicitly known by the MAC implementation. Therefore unknown MAC commands cannot be skipped and the first unknown MAC command terminates the processing of the MAC command sequence. It is therefore advisable to order MAC commands according to the version of the LoRaWAN specification which has introduced a MAC command for the first time. This way all MAC commands up to the version of the LoRaWAN specification implemented can be processed even in the presence of MAC commands specified only in a version of the LoRaWAN specification newer than that implemented.
+
+The ResetInd/ResetConf command is only available to ABP devices activated on a LoRaWAN1.1 compatible Network Server. LoRaWAN1.0 servers do not implement this MAC commandOTA devices MUST NOT implement this command. The Network Server SHALL ignore the ResetInd command coming from an OTA device. This command does not signal to the Network Server that the downlink frame counters have been reset. The frame counters (both uplink & downlink) SHALL NEVER be reset in ABP devices.
+

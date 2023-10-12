@@ -1,0 +1,22 @@
+{
+    "network_controller": {
+        "n_id": "ns_test_1",
+        "colosseum_config": {
+            "radio_config": {
+              "region": "EU863_870",
+              "spreading_factor": 7,
+              "data_rate": 5,
+              "rx_gain": 10,
+              "tx_gain": 20,
+              "bandwidth": 125000,
+              "rx_freq": 1010000000,
+              "tx_freq": 990000000,
+              "sample_rate": 1000000,
+              "rx_chan_id": 0,
+              "tx_chan_id": 1,
+              "dev_id": 0
+            },
+            "address": "192.168.40.2"
+          }
+    }
+}

@@ -1,0 +1,7 @@
+{
+        "ADR_ACK_LIMIT" : "20",
+        "ADR_ACK_DELAY" : "20",
+        "NbTrans" : "times that a frames is retransmitted",
+        "Region" : "EU868",
+        "GodServerAddress" : "127.0.0.1:9090"
+}

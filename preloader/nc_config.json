@@ -1,0 +1,9 @@
+{
+    "network_controller": {
+        "n_id": "ns_test_1",
+        "tcp_config": {
+            "tcp_dev_port": 9090,
+            "tcp_nc_port": 9091
+        }
+    }
+}

@@ -1,0 +1,5 @@
+//FIXME reversare tutti gli ordini in little endian dove non è già stato fatto -> mancano i mac commands7
+
+
+//ROBE DA FARE QUANDO LE COSE PIÙ O MENO GIÀ FUNZIONANO
+//TODO molto in là se il device manda un duplicato risponde un NC diverso e per un certo periodo quello di prima non sarà trusted
