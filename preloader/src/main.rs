@@ -8,7 +8,7 @@ use std::{
 
 use application_server::application_server::{ApplicationServer, ApplicationServerConfig};
 use clap::Parser;
-use fake_device::configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType, RadioDeviceConfig};
+use lorawan_device::configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType, RadioDeviceConfig};
 use lazy_static::lazy_static;
 use lorawan::{
     device::{
@@ -126,7 +126,7 @@ async fn main() -> Result<(), std::io::Error> {
     let _config = Config {
         devices: None,
         device: Some(DeviceConfig {
-            dtype: DeviceConfigType::TCP(fake_device::configs::TcpDeviceConfig {
+            dtype: DeviceConfigType::TCP(lorawan_device::configs::TcpDeviceConfig {
                 addr: "127.0.0.1".to_owned(),
                 port: 9090,
             }),

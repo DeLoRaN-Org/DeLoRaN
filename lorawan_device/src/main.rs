@@ -2,7 +2,7 @@
     
 use std::{fs, collections::HashMap, ops::Deref, process::{Command, Stdio}, io::{Write, Read}, time::Duration};
 use blockchain_api::BlockchainDeviceConfig;
-use fake_device::{colosseum_device::ColosseumDevice, configs::{RadioDeviceConfig, DeviceConfig, DeviceConfigType}, communicators::{extract_dev_id, MockCommunicator}, lorawan_device::LoRaWANDevice};
+use lorawan_device::{colosseum_device::ColosseumDevice, configs::{RadioDeviceConfig, DeviceConfig, DeviceConfigType}, communicators::{extract_dev_id, MockCommunicator}, lorawan_device::LoRaWANDevice};
 use lorawan::{device::{Device, DeviceClass, LoRaWANVersion, session_context::{ApplicationSessionContext, NetworkSessionContext, SessionContext}}, regional_parameters::region::{RegionalParameters, Region}, utils::{eui::EUI64, PrettyHexSlice}, encryption::key::Key, physical_parameters::{SpreadingFactor, DataRate}};
 use serde::{Serialize, Deserialize};
 use serde_json::json;

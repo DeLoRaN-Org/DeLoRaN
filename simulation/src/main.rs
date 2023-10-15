@@ -6,7 +6,7 @@ mod compiled;
 use std::{time::{Duration, SystemTime}, fs::{self, File}, net::Ipv4Addr, path::Path, process::Command as SyncCommand, str::FromStr};
 use blockchain_api::{BlockchainClient, exec_bridge::BlockchainExeClient};
 use chirpstack::main_chirpstack;
-use fake_device::tcp_device::TcpDevice;
+use lorawan_device::tcp_device::TcpDevice;
 use lorawan::{utils::{eui::EUI64, PrettyHexSlice}, device::{Device, DeviceClass, LoRaWANVersion}, regional_parameters::region::{Region, RegionalParameters}, encryption::key::Key};
 use tokio::{net::TcpStream, time::Instant, process::Command, sync::mpsc};
 use std::io::Write;

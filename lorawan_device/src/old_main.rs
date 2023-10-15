@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use clap::Parser;
-use fake_device::tcp_device::TcpDevice;
+use lorawan_device::tcp_device::TcpDevice;
 use lorawan::utils::eui::EUI64;
 use tokio::time::sleep;
 

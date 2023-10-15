@@ -1,0 +1,5 @@
+{
+    "rust-analyzer.linkedProjects": [
+        ".\\lorawan_device\\Cargo.toml"
+    ]
+}

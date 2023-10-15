@@ -3,7 +3,7 @@ mod utils;
 use std::net::{Ipv4Addr, SocketAddr, IpAddr};
 
 use blockchain_api::{exec_bridge::BlockchainExeClient, BlockchainError, BlockchainClient};
-use fake_device::{communicators::{ColosseumCommunication, LoRaWANCommunication, RadioCommunication}, configs::{RadioDeviceConfig, ColosseumDeviceConfig}};
+use lorawan_device::{communicators::{ColosseumCommunication, LoRaWANCommunication, RadioCommunication}, configs::{RadioDeviceConfig, ColosseumDeviceConfig}};
 use lorawan::{utils::{increment_nonce, nonce_valid, PrettyHexSlice, traits::ToBytesWithContext, errors::LoRaWANError, eui::EUI64}, device::Device, lorawan_packet::{LoRaWANPacket, join::{JoinAcceptPayload, JoinRequestType}, payload::Payload, mhdr::{MHDR, MType, Major}, mac_payload::MACPayload, fhdr::FHDR, fctrl::{FCtrl, DownlinkFCtrl}, mac_commands}};
 use serde::{Serialize, Deserialize};
 

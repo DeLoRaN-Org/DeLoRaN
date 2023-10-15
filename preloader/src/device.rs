@@ -1,7 +1,7 @@
 use core::panic;
 use std::time::Duration;
 
-use fake_device::{
+use lorawan_device::{
     communicators::{ColosseumCommunication, LoRaWANCommunication},
     configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType},
     lorawan_device::LoRaWANDevice,

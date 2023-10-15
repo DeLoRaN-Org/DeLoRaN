@@ -9,7 +9,7 @@ edition = "2021"
 clap = {version = "4.3.11", features = ["derive"]}
 serde = {version = "1.0.171", features = ["derive"]}
 serde_json = "1.0.102"
-fake_device = { path = "../fake_device"}
+lorawan_device = { path = "../lorawan_device"}
 application-server = { path = "../application-server"}
 network-controller = { path = "../network-controller"}
 lorawan = { path = "../lorawan"}

@@ -3,7 +3,7 @@
 use core::panic;
 use std::{collections::{HashMap, HashSet}, time::{Duration, Instant, SystemTime}, fs::File, path::Path, process::Command as SyncCommand};
 
-use fake_device::{tcp_device::TcpDevice, lorawan_device::LoRaWANDevice, communicators::LoRaWANCommunication};
+use lorawan_device::{tcp_device::TcpDevice, lorawan_device::LoRaWANDevice, communicators::LoRaWANCommunication};
 use hex::FromHex;
 use lorawan::{
     device::{Device, DeviceClass, LoRaWANVersion},
@@ -399,7 +399,7 @@ pub async fn main_chirpstack() {
     println!("{}", ans);
     let content: ChirpstackListDeviceAns = serde_json::from_str(ans).unwrap();
     
-    let mut fake_devices : Vec<LoRaWANDevice<_>> = Vec::new();
+    let mut lorawan_devices : Vec<LoRaWANDevice<_>> = Vec::new();
 
     for (i, d )in content.result.iter().enumerate() {
         let ans = client.get(format!("http://127.0.0.1:8090/api/devices/{}/keys", d.devEui))
@@ -421,13 +421,13 @@ pub async fn main_chirpstack() {
             LoRaWANVersion::V1_0_3,
         );
         let fd = TcpDevice::create(device, "localhost".to_owned(), 9999).await;
-        fake_devices.push(fd);
+        lorawan_devices.push(fd);
         println!("Got {i} device");
     }
 
     let mut handles = Vec::new();
     
-    for (i, mut fd) in fake_devices.into_iter().enumerate().take(NUM_DEVICES) {
+    for (i, mut fd) in lorawan_devices.into_iter().enumerate().take(NUM_DEVICES) {
         let cloned_sender = sender.clone();
         handles.push(tokio::spawn(async move { device_routine(fd,i,cloned_sender, start).await }));
     }

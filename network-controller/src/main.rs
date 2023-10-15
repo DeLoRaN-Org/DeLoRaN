@@ -1,7 +1,7 @@
 use std::net::{IpAddr, Ipv4Addr};
 
 use clap::Parser;
-use fake_device::configs::{RadioDeviceConfig, ColosseumDeviceConfig};
+use lorawan_device::configs::{RadioDeviceConfig, ColosseumDeviceConfig};
 use lazy_static::lazy_static;
 use lorawan::{regional_parameters::region::Region, physical_parameters::{SpreadingFactor, DataRate}};
 use network_controller::network_controller::{NetworkController, NetworkControllerTCPConfig};
