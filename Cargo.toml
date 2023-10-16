@@ -1,0 +1,11 @@
+[workspace]
+
+members = [
+    "application_server",
+    "blockchain_api",
+    "lorawan",
+    "lorawan_device",
+    "network_controller",
+    "preloader",
+    "simulation"
+]

@@ -1,5 +1,4 @@
-#![allow(non_snake_case, unreachable_code, unused)]
-
+#![allow(non_snake_case, unreachable_code, unused, clippy::iter_skip_zero)]
 mod chirpstack;
 mod compiled;
 

@@ -1,7 +1,5 @@
-#![allow(non_snake_case)]
-use std::io::Write;
 use std::net::IpAddr;
-use std::{collections::HashMap, time::{SystemTime, Instant}, fs::OpenOptions};
+use std::{collections::HashMap, time::SystemTime};
 use lorawan::{utils::{PrettyHexSlice, eui::EUI64}, device::Device};
 use serde::{Serialize, Deserialize};
 use tokio::process::Command;
@@ -9,6 +7,7 @@ use tokio::process::Command;
 
 use crate::{BlockchainDeviceSession, BlockchainDeviceConfig, BlockchainState, BlockchainPacket, BlockchainError};
 
+#[allow(non_snake_case)]
 #[derive(Serialize)]
 struct BlockchainArgs {
     Args: Vec<String>

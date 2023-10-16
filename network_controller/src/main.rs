@@ -1,9 +1,9 @@
 use std::net::{IpAddr, Ipv4Addr};
 
+use lorawan::{regional_parameters::region::Region, physical_parameters::{SpreadingFactor, DataRate}};
 use clap::Parser;
 use lorawan_device::configs::{RadioDeviceConfig, ColosseumDeviceConfig};
 use lazy_static::lazy_static;
-use lorawan::{regional_parameters::region::Region, physical_parameters::{SpreadingFactor, DataRate}};
 use network_controller::network_controller::{NetworkController, NetworkControllerTCPConfig};
 
 #[derive(Parser, Debug)]

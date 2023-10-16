@@ -1,4 +1,3 @@
-#![allow(non_snake_case)]
     
 use std::{fs, collections::HashMap, ops::Deref, process::{Command, Stdio}, io::{Write, Read}, time::Duration};
 use blockchain_api::BlockchainDeviceConfig;
@@ -7,6 +6,7 @@ use lorawan::{device::{Device, DeviceClass, LoRaWANVersion, session_context::{Ap
 use serde::{Serialize, Deserialize};
 use serde_json::json;
 
+#[allow(non_snake_case)]
 #[derive(Serialize)]
 struct BlockchainArgs {
     Args: Vec<String>

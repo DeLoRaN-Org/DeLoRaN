@@ -10,8 +10,8 @@ clap = {version = "4.3.11", features = ["derive"]}
 serde = {version = "1.0.171", features = ["derive"]}
 serde_json = "1.0.102"
 lorawan_device = { path = "../lorawan_device"}
-application-server = { path = "../application-server"}
-network-controller = { path = "../network-controller"}
+application_server = { path = "../application_server"}
+network_controller = { path = "../network_controller"}
 lorawan = { path = "../lorawan"}
 tokio = { version = "1", features = ["full"] }
 lazy_static = "1.4.0"
