@@ -153,6 +153,8 @@ pub struct LoRaPacket {
     pub ih: u8,
     pub sf: u8,
     pub bw: f32,
+    pub rssi: f32,
+    pub snr: f32
 }
 
 impl<'source> FromPyObject<'source> for LoRaPacket {
@@ -169,6 +171,9 @@ impl<'source> FromPyObject<'source> for LoRaPacket {
             ih: ob.getattr("ih")?.extract()?,
             sf: ob.getattr("SF")?.extract()?,
             bw: ob.getattr("BW")?.extract()?,
+            rssi: ob.getattr("rssi")?.extract()?,
+            snr: ob.getattr("snr")?.extract()?,
+            
         })
     }
 }
