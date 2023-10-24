@@ -13,6 +13,8 @@ import queue
 
 from time import sleep
 
+############### START LORA_TRANSCEIVER.PY #########################
+
 class bcolors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -584,6 +586,10 @@ class lora_transceiver():
         # print("Main class", self.rx_streamer)
 
 
+############### END LORA_TRANSCEIVER.PY #########################
+
+############### START LORA_UTILS.PY #########################
+
 NACK_CODE = 255
 POLLING_CODE = 254
 POLLING_CODE_BROADCAST = 252
@@ -728,6 +734,11 @@ def unpack_lora_ack(acks_array):
 
 
     return missing_seqn
+
+############### END LORA_UTILS.PY #########################
+
+
+############### START LORA.PY #########################
 
 #############CONSTANTS#####################
 # rising and falling edges duration
@@ -1418,6 +1429,26 @@ def lora_chirp(mu, k, BW, K, OSF, t0_frac=0, phi0=0):
         (s, phi) = chirp(-mu * BW / 2, K * OSF, Ts, Df, t0_frac, phi0)
     return s, phi
 
+def calculate_power(signal):
+    return np.abs(signal)**2
+
+def calculate_mean_power(signal):
+    return np.mean(calculate_power(signal))
+
+def calculate_snr(signal):
+    signal_power = calculate_mean_power(signal)
+    noise_power = estimate_noise_power(signal)
+    return 10 * np.log10(signal_power / noise_power)
+
+def calculate_rssi(signal):
+    signal_power = calculate_mean_power(signal)
+    return 10 * np.log10(signal_power)
+
+def estimate_noise_power(signal):
+    total_power = np.sum(calculate_power(signal))
+    signal_power = calculate_mean_power(signal)
+    return total_power - signal_power
+
 def samples_decoding(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
 
     max_packets = int(np.ceil(Ts * s.size / min_time_lora_packet))
@@ -1454,7 +1485,9 @@ def samples_decoding(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
             # print("FCS Check", HDR_FCS_OK)
             # print("MAC CRC",MAC_CRC_OK)
             # print("PAYLOAD LENGTH", len(payload))
-            pack_array[received] = LoRaPacket(payload,SRC,DST,SEQNO,HDR_FCS_OK,HAS_CRC,MAC_CRC_OK,CR,0,SF,BW)
+            rssi = calculate_rssi(s[cumulative_index:])
+            snr = calculate_snr(s[cumulative_index:])
+            pack_array[received] = LoRaPacket(payload,SRC,DST,SEQNO,HDR_FCS_OK,HAS_CRC,MAC_CRC_OK,CR,0,SF,BW, rssi, snr)
             received = received + 1
 
 
@@ -1694,7 +1727,7 @@ def decode(complex_samples,SF, BW, fs):
 
 #CLASS TO CONVENIENTLY ENCAPSULATE LORA PACKETS
 class LoRaPacket:
-    def __init__(self,payload,src,dst,seqn,hdr_ok,has_crc,crc_ok,cr,ih,SF,BW):
+    def __init__(self,payload,src,dst,seqn,hdr_ok,has_crc,crc_ok,cr,ih,SF,BW, rssi, snr):
         self.payload = payload
         self.src = np.uint8(src)
         self.dst = np.uint8(dst)
@@ -1706,6 +1739,8 @@ class LoRaPacket:
         self.ih = np.uint8(ih)
         self.SF = np.uint8(SF)
         self.BW = BW
+        self.rssi = rssi
+        self.snr = snr
 
     def __eq__(self, other):
         payload_eq = np.all(self.payload == other.payload)
@@ -1769,6 +1804,10 @@ class LoRaPacket:
                     pl_len = "Payload Length: " + str(self.payload.size) + "\n"
                     return desc + sf_desc + bw_desc + hdr_chk + ih_desc + src_desc + dest_desc + seq_desc + cr_desc + crc_check + pl_len + pl_str
 
+############### END LORA.PY #########################
+
+
+############### START LORA_HIGHER_LEVEL.PY #########################
 
 def packet_receiver(pkt_queue: mp.Queue, packets, sf, filterID=None, tmt=None):
     print("Started receiver for sf", sf, "and timeout", tmt)
@@ -1913,6 +1952,7 @@ if __name__ == "__main__":
     main()
 
 
+############### END LORA_HIGHER_LEVEL.PY #########################
 
 
 '''
