@@ -1,5 +1,6 @@
 pub mod exec_bridge;
 pub mod tcp_bridge;
+pub mod mock_bridge;
 
 
 use std::fmt::Display;
@@ -18,22 +19,22 @@ use async_trait::async_trait;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BlockchainDeviceConfig {
-    pub class: DeviceClass,
-    pub version: LoRaWANVersion,
-    pub region: Region,
     pub activation_mode: ActivationMode,
-    pub dev_nonce: u32,
-    pub dev_eui: EUI64,
-    pub join_eui: EUI64,
-    pub nwk_key: Key,
     pub app_key: Key,
-    pub js_int_key: Key,
-    pub js_enc_key: Key,
-    pub rj_count1: u16,
-    pub join_nonce: u32,
-    pub last_join_request_received: JoinRequestType,
+    pub class: DeviceClass,
     pub dev_addr: Option<[u8; 4]>,
+    pub dev_eui: EUI64,
+    pub dev_nonce: u32,
+    pub join_eui: EUI64,
+    pub join_nonce: u32,
+    pub js_enc_key: Key,
+    pub js_int_key: Key,
+    pub last_join_request_received: JoinRequestType,
+    pub nwk_key: Key,
     pub owner: String,
+    pub region: Region,
+    pub rj_count1: u16,
+    pub version: LoRaWANVersion,
 }
 
 impl From<BlockchainDeviceConfig> for Device {
@@ -163,31 +164,6 @@ pub struct BlockchainState {
     pub packets: Vec<BlockchainPacket>,
 }
 
-pub enum LoRaWANCounterType {
-    AfCntDwn,
-    FCntUp,
-    NfCntDwn,
-    RjCount0,
-    RjCount1,
-    JoinNonce,
-    DevNonce,
-}
-
-impl Display for LoRaWANCounterType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let w = match self {
-            LoRaWANCounterType::AfCntDwn => "AF_CNT_DWN",
-            LoRaWANCounterType::FCntUp => "F_CNT_UP",
-            LoRaWANCounterType::NfCntDwn => "NF_CNT_DWN",
-            LoRaWANCounterType::RjCount0 => "RJ_COUNT0",
-            LoRaWANCounterType::RjCount1 => "RJ_COUNT1",
-            LoRaWANCounterType::JoinNonce => "JOIN_NONCE",
-            LoRaWANCounterType::DevNonce => "DEV_NONCE",
-        };
-        write!(f, "{w}")
-    }
-}
-
 #[derive(Debug)]
 pub enum BlockchainError {
     GenericError(String),
@@ -208,6 +184,9 @@ impl Display for BlockchainError {
 
 #[async_trait]
 pub trait BlockchainClient: Send + Sync {
+    type Config: Send + Sync + Clone;
+
+    async fn from_config(config: &Self::Config) -> Result<Box<Self>, BlockchainError>;
     async fn get_hash(&self) -> Result<String, BlockchainError>;
     async fn get_device_session(&self,    dev_addr: &[u8; 4]) -> Result<BlockchainDeviceSession, BlockchainError>;
     async fn get_device_config(&self, dev_eui: &EUI64,) -> Result<BlockchainDeviceConfig, BlockchainError>;

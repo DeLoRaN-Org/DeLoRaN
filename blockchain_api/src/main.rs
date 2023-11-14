@@ -1,3 +1,4 @@
+use blockchain_api::{BlockchainDeviceConfig, exec_bridge::BlockchainAns};
 use lorawan::{
     device::{
         session_context::{ApplicationSessionContext, NetworkSessionContext, SessionContext},
@@ -51,70 +52,10 @@ fn _create_uninitialized_device() -> Device {
 }
 
 async fn async_main() {
-    //create_configs(0, 12);    
-    //let client = BlockchainExeClient::new("orderer1.orderers.dlwan.phd:6050", "lorawan", "lorawan", None).await;
-    //let state = client.get_public_blockchain_state().await.unwrap();
-    //let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis();
-    //let path = format!("../simulation/output/state_{timestamp}.json");
-    //let mut out_state = File::create(path).unwrap();
-    //writeln!(out_state, "{}", serde_json::to_string_pretty(&state).unwrap()).unwrap();    
-    //let dev_addr = EUI64::from([232,5,211,58,157,111,23,37]); 
-    //let ans = client.get_device(&dev_addr).await.unwrap();
+    let b = r#"{"content":{"activation_mode":"OTAA","app_key":[74,239,119,51,36,170,223,62,36,191,49,203,205,163,119,160],"class":"A","dev_addr":null,"dev_eui":[229,46,176,41,160,23,108,83],"dev_nonce":0,"join_eui":[10,212,98,74,55,147,214,94],"join_nonce":0,"js_enc_key":[209,9,95,201,208,91,155,200,167,110,67,216,63,47,112,199],"js_int_key":[100,173,119,201,244,115,111,12,178,205,59,53,148,35,140,168],"last_join_request_received":"JoinRequest","nwk_key":[74,239,119,51,36,170,223,62,36,191,49,203,205,163,119,160],"owner":"Org1MSP","region":"EU863_870","rj_count1":0,"version":"V1_0_4"}}"#;
+    let a = serde_json::from_str::<BlockchainAns<BlockchainDeviceConfig>>(b).unwrap();
+    println!("{a:?}");
 
-    //let mut c = 0;
-    //match client.create(&_create_uninitialized_device()).await {
-    //    Ok(v) => println!("Call {} success: {v:?}", c),
-    //    Err(e) => eprintln!("Call {} failed, {e:?}", c),
-    //}
-    //c += 1;
-    //println!();
-    //match client.get_hash().await {
-    //    Ok(v) => println!("Call {} success: {v:?}", c),
-    //    Err(e) => eprintln!("Call {} failed, {e:?}", c),
-    //}
-    //c += 1;
-    //println!();
-    //match client.get_device(&EUI64::from([80,222,38,70,249,167,172,142])).await {
-    //    Ok(v) => println!("Call {} success: {v:?}", c),
-    //    Err(e) => eprintln!("Call {} failed, {e:?}", c),
-    //}
-    //c += 1;
-    //println!();
-    //match client.get_device_session(&[80,222,38,70]).await {
-    //    Ok(v) => println!("Call {} success: {v:?}", c),
-    //    Err(e) => eprintln!("Call {} failed, {e:?}", c),
-    //}
-    //c += 1;
-    //println!();
-    //match client.get_device_config(&EUI64::from_hex("50DE2646F9A7AC8E").unwrap()).await {
-    //    Ok(v) => println!("Call {} success: {v:?}", c),
-    //    Err(e) => eprintln!("Call {} failed, {e:?}", c),
-    //}
-
-    //match client.get_public_blockchain_state().await {
-    //    Ok(v) => println!("Call {} success: {v:?}", c),
-    //    Err(e) => eprintln!("Call {} failed, {e:?}", c),
-    //}
-    //c += 1;
-    //println!();
-    //match client.delete_device(&EUI64::from([80,222,38,70,249,167,172,142])).await {
-    //    Ok(v) => println!("Call {} success: {v:?}", c),
-    //    Err(e) => eprintln!("Call {} failed, {e:?}", c),
-    //}
-    //c += 1;
-    //println!();
-    ////client.delete_device_session(&[80,222,38,70]).await {
-    ////client.create_join(&[1,2,3,4,5,6,7,8,9,0], &[1,2,3,4,5,6,7,8,9,0], "id_1").await {
-    ////client.create_uplink(&[1,2,3,4,5,6,7,8,9,0], Some(&[1,2,3,4,5,6,7,8,9,0]), "id_1").await {
-    ////client.get_packet("abcdefabdcdef").await {
-//
-    //match client.get_public_blockchain_state().await {
-    //    Ok(v) => println!("Call {} success: {v:?}", c),
-    //    Err(e) => eprintln!("Call {} failed, {e:?}", c),
-    //}
-    //c += 1;
-    //println!();
-    
 }
 
 

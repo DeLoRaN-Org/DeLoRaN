@@ -8,7 +8,7 @@ use std::{
 
 use application_server::application_server::{ApplicationServer, ApplicationServerConfig};
 use clap::Parser;
-use lorawan_device::configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType, RadioDeviceConfig};
+use lorawan_device::{configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType, RadioDeviceConfig}, colosseum_device::ColosseumCommunicator, radio_device::RadioCommunicator};
 use lazy_static::lazy_static;
 use lorawan::{
     device::{
@@ -22,6 +22,7 @@ use lorawan::{
 };
 use network_controller::network_controller::{NetworkController, NetworkControllerTCPConfig};
 use serde::{Deserialize, Serialize};
+use blockchain_api::exec_bridge::{BlockchainExeConfig, BlockchainExeClient};
 
 use crate::device::device_main;
 
@@ -71,18 +72,27 @@ impl Config {
     }
 }
 
-async fn network_controller_main(
-    config: &'static NetworkControllerConfig,
-    sdr_code: &'static str,
-) {
-    let nc = NetworkController::init(
+async fn network_controller_main(config: &'static NetworkControllerConfig) {
+    let nc = NetworkController::new(
         config.n_id.as_ref(),
-        config.tcp_config.as_ref(),
-        config.radio_config.as_ref(),
-        config.colosseum_config.as_ref(),
     );
-    nc.routine(Some(sdr_code)).await.unwrap();
 
+    lazy_static!(
+        static ref BC_CONFIG: BlockchainExeConfig = BlockchainExeConfig {
+            orderer_addr: "orderer1.orderers.dlwan.phd:6050".to_string(),
+            channel_name: "lorawan".to_string(),
+            chaincode_name: "lorawan".to_string(),
+            orderer_ca_file_path: None,
+        };
+    );
+
+    let t1 = config.colosseum_config.as_ref().map(|colosseum_config| nc.routine::<ColosseumCommunicator, BlockchainExeClient>(colosseum_config, &BC_CONFIG));
+    let t2 = config.radio_config.as_ref().map(|radio_config| nc.routine::<RadioCommunicator, BlockchainExeClient>(radio_config, &BC_CONFIG));
+    let t3 = config.tcp_config.as_ref().map(|tcp_config| nc.tcp_routine::<BlockchainExeClient>(tcp_config, &BC_CONFIG));
+    
+    if let Some(t) = t1 { t.await.unwrap(); }
+    if let Some(t) = t2 { t.await.unwrap(); }
+    if let Some(t) = t3 { t.await.unwrap(); }
 }
 
 async fn application_server_main(config: &'static ApplicationServerConfig) {
@@ -168,6 +178,7 @@ async fn main() -> Result<(), std::io::Error> {
                     dev_id: 0
                 },
                 address: IpAddr::V4(Ipv4Addr::LOCALHOST),
+                sdr_code: String::from("./src/sdr-lora-merged.py")
             }),
         }),
         application_server: Some(ApplicationServerConfig {
@@ -180,14 +191,14 @@ async fn main() -> Result<(), std::io::Error> {
 
     lazy_static! {
         static ref ARGS: Args  = Args::parse();
-        static ref SNR_LORA_CODE: String = {
-            let mut buffer = String::new();
-            let _ = File::open(ARGS.pcode.as_ref().unwrap())
-                .unwrap()
-                .read_to_string(&mut buffer)
-                .unwrap();
-            buffer
-        };
+        //static ref SNR_LORA_CODE: String = {
+        //    let mut buffer = String::new();
+        //    let _ = File::open(ARGS.pcode.as_ref().unwrap())
+        //        .unwrap()
+        //        .read_to_string(&mut buffer)
+        //        .unwrap();
+        //    buffer
+        //};
         static ref CONFIGS: (
             Option<Vec<DeviceConfig>>,
             Option<DeviceConfig>,
@@ -231,11 +242,11 @@ async fn main() -> Result<(), std::io::Error> {
     }
 
     if let Some(c) = &CONFIGS.0 {
-        device_main(c.iter().collect(), &SNR_LORA_CODE).await;
+        device_main(c.iter().collect()).await;
     } else if let Some(c) = &CONFIGS.1 {
-        device_main(vec![c], &SNR_LORA_CODE).await;
+        device_main(vec![c]).await;
     } else if let Some(c) = &CONFIGS.2 {
-        network_controller_main(c, &SNR_LORA_CODE).await;
+        network_controller_main(c).await;
     } else if let Some(c) = &CONFIGS.3 {
         application_server_main(c).await;
     } else {

@@ -239,7 +239,8 @@
           "tx_chan_id": 1,
           "dev_id": 1001
         },
-        "address": "192.168.40.2"
+        "address": "192.168.40.2",
+        "sdr_code": "./src/sdr-lora-merged.py"
       }
     },
     "application_server": {

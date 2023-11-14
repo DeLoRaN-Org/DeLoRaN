@@ -1,25 +1,25 @@
 mod utils;
 
-use std::net::{Ipv4Addr, SocketAddr, IpAddr};
+use std::{net::{Ipv4Addr, SocketAddr, IpAddr}, sync::Arc};
 
 use blockchain_api::{exec_bridge::BlockchainExeClient, BlockchainError, BlockchainClient};
-use lorawan_device::{communicators::{ColosseumCommunication, LoRaWANCommunication, RadioCommunication}, configs::{RadioDeviceConfig, ColosseumDeviceConfig}};
-use lorawan::{utils::{increment_nonce, nonce_valid, PrettyHexSlice, traits::ToBytesWithContext, errors::LoRaWANError, eui::EUI64}, device::Device, lorawan_packet::{LoRaWANPacket, join::{JoinAcceptPayload, JoinRequestType}, payload::Payload, mhdr::{MHDR, MType, Major}, mac_payload::MACPayload, fhdr::FHDR, fctrl::{FCtrl, DownlinkFCtrl}, mac_commands}};
+use lorawan::{utils::{increment_nonce, nonce_valid, PrettyHexSlice, traits::ToBytesWithContext, errors::LoRaWANError, eui::EUI64}, device::Device, lorawan_packet::{LoRaWANPacket, join::{JoinAcceptPayload, JoinRequestType}, payload::Payload, mhdr::{MHDR, MType, Major}, mac_payload::MACPayload, fhdr::FHDR, fctrl::{FCtrl, DownlinkFCtrl}, mac_commands}, physical_parameters::SpreadingFactor};
+use lorawan_device::communicator::LoRaWANCommunicator;
 use serde::{Serialize, Deserialize};
 
-use tokio::{net::{TcpListener, TcpStream}, io::{AsyncReadExt, AsyncWriteExt}};
-use tokio::sync::mpsc::{self, Sender as MpscSender};
+use tokio::{net::{TcpListener, TcpStream}, io::{AsyncReadExt, AsyncWriteExt}, task::JoinHandle};
+use tokio::sync::mpsc::{Receiver as MpscReceiver, Sender as MpscSender};
 use crate::{utils::error::NCError, network_controller::utils::{NCTaskResponse, NCTaskCommand}};
 
 use self::utils::CommandWrapper;
 
-
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct NetworkController {
     pub n_id: &'static str,
-    tcp_config:   Option<&'static NetworkControllerTCPConfig>,
-    radio_config: Option<&'static RadioDeviceConfig>,
-    colosseum_config: Option<&'static ColosseumDeviceConfig>,
+    mpsc_tx: MpscSender<CommandWrapper>,
+    //tcp_config:   Option<&'static NetworkControllerTCPConfig>,
+    //radio_config: Option<&'static RadioDeviceConfig>,
+    //colosseum_config: Option<&'static ColosseumDeviceConfig>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -29,17 +29,21 @@ pub struct NetworkControllerTCPConfig {
 }
 
 impl NetworkController {
-    pub fn init(n_id: &'static str, tcp_config: Option<&'static NetworkControllerTCPConfig>, radio_config: Option<&'static RadioDeviceConfig>, colosseum_config: Option<&'static ColosseumDeviceConfig>) -> Self {
+    pub fn new(n_id: &'static str) -> Self {
+        let (mpsc_tx, mpsc_rx) = tokio::sync::mpsc::channel::<CommandWrapper>(128);
+
+        tokio::spawn(async move {
+            Self::handle_commands_task(mpsc_rx).await
+        });
+
         Self {
             n_id,
-            tcp_config,
-            radio_config,
-            colosseum_config,
-        } 
+            mpsc_tx
+        }
     }
 
-    async fn handle_join_request(join_request: Vec<u8>, bc_client: &impl BlockchainClient) -> Result<(Vec<u8>, EUI64), NCError> {
-        let packet = LoRaWANPacket::from_bytes(&join_request, None, true)?;
+    async fn handle_join_request(join_request: &[u8], bc_client: Arc<impl BlockchainClient>) -> Result<(Vec<u8>, EUI64), NCError> {
+        let packet = LoRaWANPacket::from_bytes(join_request, None, true)?;
         if let Payload::JoinRequest(jr_p) = packet.payload() {
             match bc_client.get_device_config(jr_p.dev_eui()).await  {
                 Err(e) => {
@@ -52,7 +56,7 @@ impl NetworkController {
                     let (dev_nonce_valid, dev_nonce_looped) = nonce_valid(jr_p.dev_nonce(), device_nonce_u16);
                     if !dev_nonce_valid { Err(NCError::InvalidJoinRequest(format!("Invalid dev_nonce, expected > {device_nonce_u16}, received {}", jr_p.dev_nonce()))) }
                     else {
-                        LoRaWANPacket::validate_mic(&join_request, &packet, &device)?;
+                        LoRaWANPacket::validate_mic(join_request, &packet, &device)?;
                         
                         let dev_addr = [0_u8; 4].map(|_| rand::random::<u8>()); 
                         let mut dl_settings = 0_u8;
@@ -94,7 +98,7 @@ impl NetworkController {
         } else { Err(NCError::InvalidJoinRequest("Not a join request".to_string())) }
     }
 
-    async fn handle_unconfirmed_data_up(data_up: &[u8], bc_client: &impl BlockchainClient) -> Result<Device, NCError> {
+    async fn handle_unconfirmed_data_up(data_up: &[u8], bc_client: Arc<impl BlockchainClient>) -> Result<Device, NCError> {
         let packet = LoRaWANPacket::from_bytes(data_up, None, true)?;
         if let Payload::MACPayload(payload) = packet.into_payload() {
             let dev_addr = payload.fhdr().dev_addr();
@@ -133,7 +137,7 @@ impl NetworkController {
         } else { Err(NCError::InvalidUplink("Not a MACPayload payload".to_string())) }
     }
 
-    async fn handle_confirmed_data_up(data_up: &[u8], bc_client: &impl BlockchainClient ) -> Result<(Vec<u8>, EUI64), NCError> {
+    async fn handle_confirmed_data_up(data_up: &[u8], bc_client: Arc<impl BlockchainClient>) -> Result<(Vec<u8>, EUI64), NCError> {
         let mut device = Self::handle_unconfirmed_data_up(data_up, bc_client).await?;
         
         let dev_addr = *device.session().unwrap().network_context().dev_addr();
@@ -157,23 +161,23 @@ impl NetworkController {
         Ok((data_down, *device.dev_eui()))
     }
 
-    async fn handle_commands_task(mut mpsc_rx: mpsc::Receiver<CommandWrapper>) {
-        let client = BlockchainExeClient::new("orderer1.orderers.dlwan.phd:6050", "lorawan", "lorawan", None);
+    async fn handle_commands_task(mut mpsc_rx: MpscReceiver<CommandWrapper>) {
+        let client = Arc::new(BlockchainExeClient::new("orderer1.orderers.dlwan.phd:6050", "lorawan", "lorawan", None)); 
         while let Some(command) = mpsc_rx.recv().await {
-            let client_cloned = client.clone();
+            
+            let c = Arc::clone(&client);
             tokio::spawn(async move {
                 if (match command.0 {
                     NCTaskCommand::JoinRequest { join_request } => {
-                        let response = Self::handle_join_request(join_request, &client_cloned).await;
-                        command.1.send(NCTaskResponse::JoinRequest { result: response })
-                        
+                        let response = Self::handle_join_request(&join_request, c).await;
+                        command.1.send(NCTaskResponse::JoinRequest { result: response })              
                     },
                     NCTaskCommand::UnConfirmedDataUp { data_up } => {
-                        let response = Self::handle_unconfirmed_data_up(&data_up, &client_cloned).await;
+                        let response = Self::handle_unconfirmed_data_up(&data_up, c).await;
                         command.1.send(NCTaskResponse::UnConfirmedDataUp { result: response.map(|_| ()) })
                     },
                     NCTaskCommand::ConfirmedDataUp   { data_up } => {
-                        let response = Self::handle_confirmed_data_up(&data_up, &client_cloned).await;
+                        let response = Self::handle_confirmed_data_up(&data_up, c).await;
                         command.1.send(NCTaskResponse::ConfirmedDataUp { result: response })
                     },
                 }).is_err() { eprintln!("Error sending response back to task handler") }
@@ -181,7 +185,7 @@ impl NetworkController {
         }
     }
     
-    async fn create_and_send_task(mhdr: &MHDR, buf: &[u8], mpsc_tx: &MpscSender<CommandWrapper>) -> Result<Option<(Vec<u8>, EUI64)>, NCError> {
+    async fn create_and_send_task(mhdr: &MHDR, buf: &[u8], mpsc_tx: &MpscSender<CommandWrapper>) -> Result<Option<(Vec<u8>, EUI64)>, NCError> {        
         match mhdr.mtype() {
             MType::JoinRequest => {
                 let cmd = NCTaskCommand::JoinRequest { join_request: buf.to_vec() };
@@ -191,20 +195,15 @@ impl NetworkController {
                     eprintln!("Error while sending command to task");
                     Err(NCError::CommandTransmissionFailed("should not happen".to_string()))
                 }
-                //None
             },
             MType::UnconfirmedDataUp => {
-                let data_up = buf;
-                let data_up_vect = data_up.to_vec();
 
-                let cmd = NCTaskCommand::UnConfirmedDataUp { data_up: data_up_vect };
+                let cmd = NCTaskCommand::UnConfirmedDataUp { data_up: buf.to_vec() };
                 utils::send_task(cmd, mpsc_tx).await.map(|_v| None)
             },
             MType::ConfirmedDataUp => {
-                let data_up = buf;
-                let data_up_vect = data_up.to_vec();
-
-                let cmd = NCTaskCommand::ConfirmedDataUp { data_up: data_up_vect };
+      
+                let cmd = NCTaskCommand::ConfirmedDataUp { data_up: buf.to_vec() };
                 match utils::send_task(cmd, mpsc_tx).await {
                     Ok(nctr) => {
                         if let NCTaskResponse::ConfirmedDataUp { result } = nctr {
@@ -226,21 +225,19 @@ impl NetworkController {
         }
     }
 
-    async fn handle_tcp_connection(mut cl_sock: TcpStream, mpsc_tx: MpscSender<CommandWrapper>, n_id: &'static str) {
-        let client = BlockchainExeClient::new("orderer1.orderers.dlwan.phd:6050", "lorawan", "lorawan", None);
-        let mut buf = [0_u8; 1024];
+    async fn handle_tcp_connection(mut cl_sock: TcpStream, mpsc_tx: MpscSender<CommandWrapper>, n_id: &'static str,  bc_client: Arc<impl BlockchainClient>) {
+        let mut buf = vec![0_u8; 1024];
         while let Ok(bytes_read) = cl_sock.read(&mut buf).await {
             println!("read {} bytes: {}", bytes_read, PrettyHexSlice(&buf[..bytes_read]));
             if bytes_read == 0 {break}
-            let mhdr = MHDR::from_bytes(buf[0]);
+            let mhdr: MHDR = MHDR::from_bytes(buf[0]);
             let answer = Self::create_and_send_task(&mhdr, &buf[..bytes_read], &mpsc_tx).await;
             match answer {
                 Ok(ans) => {
-                    //TODO UNCONFIRMED DATA UP NON SEGNALA SE IL PACCHETTO NON È VALIDO, RITORNARE UN CAMPO RESULT INVECE CHE NULLA
                     if let Some((in_answer, _)) = &ans {
                         cl_sock.write_all(in_answer).await.unwrap();
                     }
-                    match client.create_uplink(&buf[..bytes_read], (ans.map(|v| v.0)).as_deref(), n_id).await {
+                    match bc_client.create_uplink(&buf[..bytes_read], (ans.map(|v| v.0)).as_deref(), n_id).await {
                         Ok(_) =>  {
                             println!("uplink created successfully");
                         }, 
@@ -255,45 +252,119 @@ impl NetworkController {
         println!("task ended");
     }
 
-    async fn handle_colosseum_connection(mpsc_tx: MpscSender<CommandWrapper>, colosseum_config: &'static ColosseumDeviceConfig, sdr_code: &'static str, n_id: &'static str) {
-        let client = BlockchainExeClient::new("orderer1.orderers.dlwan.phd:6050", "lorawan", "lorawan", None);
+    async fn handle_connection<LC,BC>(mpsc_tx: MpscSender<CommandWrapper>, config: &'static LC::Config, n_id: &'static str, blockchain_config: &BC::Config) 
+    where LC: LoRaWANCommunicator + Sync + Send + 'static, 
+          BC: BlockchainClient + 'static { //TODO TOO MANY 'STATIC PROBABLY WRONG BUT IT COMPILES LETS SEE HOW IT GOES
 
-        /*let mut radio_communicator = ColosseumCommunication::new(IpAddr::V4(Ipv4Addr::LOCALHOST), RadioDeviceConfig {
-            region: Region::EU863_870,
-            spreading_factor: SpreadingFactor::new(7),
-            data_rate: DataRate::new(5),
-            rx_gain: 10,
-            tx_gain: 20,
-            bandwidth: 125_000,
-            sample_rate: 1_000_000,
-            rx_freq: 990_000_000,
-            tx_freq: 1_010_000_000,
-            rx_chan_id: 0,
-            tx_chan_id: 1,
-        }, sdr_code);*/
-
-        let mut radio_communicator = ColosseumCommunication::new(colosseum_config.address, colosseum_config.radio_config, sdr_code);
-
+        let client: Arc<BC> = Arc::new(*BC::from_config(blockchain_config).await.unwrap());
+        let communicator = Arc::new(*LC::from_config(config).await.unwrap());
         loop {
-            match radio_communicator.receive_downlink(None, None).await {
-                Ok(content) => {
-                    let packet = content.get(&colosseum_config.radio_config.spreading_factor).cloned().unwrap();
+            match communicator.receive_downlink(None).await {
+                Ok(mut content) => {
+                    let sf = SpreadingFactor::new(7);
+                    let packet = content.remove(&sf).unwrap(); //TODO analyze all packets instead of just one from sf 7
                     if !packet.payload.is_empty() {
-                        println!("Received {} at sf {}",PrettyHexSlice(&packet.payload),&colosseum_config.radio_config.spreading_factor.value());
+                        println!("Received {} at sf {}",PrettyHexSlice(&packet.payload), sf);
                         let mhdr = MHDR::from_bytes(packet.payload[0]);
 
                         let mpsc_clone = mpsc_tx.clone();
-                        let client_clone = client.clone();
-                        let mut radio_communicator_clone = radio_communicator.clone();
+                        let client_clone = Arc::clone(&client);
+                        let radio_clone = Arc::clone(&communicator);
+
                         tokio::spawn(async move {
                             let answer = Self::create_and_send_task(&mhdr, &packet.payload, &mpsc_clone).await;
                             match answer {
                                 Ok(ans) => {
-                                    //TODO UNCONFIRMED DATA UP NON SEGNALA SE IL PACCHETTO NON È VALIDO, RITORNARE UN CAMPO RESULT INVECE CHE NULLA
                                     if let Some((in_answer, dest)) = &ans {
-                                        radio_communicator_clone.send_uplink(in_answer, None, Some(*dest)).await.unwrap();
+                                        radio_clone.send_uplink(in_answer, None, Some(*dest)).await.unwrap();
                                     }
                                     match client_clone.create_uplink(&packet.payload, (ans.map(|v| v.0)).as_deref(), n_id).await {
+                                        Ok(_) =>  {
+                                            println!("uplink created successfully");
+                                        }, 
+                                        Err(e) => {
+                                            println!("Error creating uplink with answer: {e:?}")
+                                        },
+                                    };
+                                },
+                                Err(e) => eprintln!("{e:?}"),
+                            }
+                        });
+                    };
+                },
+                Err(e) => {
+                    println!("Error receiving downlink: {e:?}");
+                    break;
+                },
+            }
+        }
+    }
+
+    pub fn tcp_routine<BC>(&self, config: &NetworkControllerTCPConfig, blockchain_config: &BC::Config) -> JoinHandle<()> where BC: BlockchainClient + 'static  {
+        let n_id: &str = self.n_id;
+        let m = self.mpsc_tx.clone();
+        let c = blockchain_config.clone();
+        let tcp_dev_port = config.tcp_dev_port;
+        
+        tokio::spawn( async move {
+            //TODO implement nc communications 
+            //let nc_addr: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), self.config.tcp_nc_port);
+            
+            let client: Arc<BC> = Arc::new(*BC::from_config(&c).await.unwrap());
+            let dev_addr: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), tcp_dev_port);
+            let dev_socket = TcpListener::bind(dev_addr).await.unwrap();
+            println!("Waiting for connections...");
+            while let Ok((cl_sock, _addr)) = dev_socket.accept().await {
+                println!("Received connection");
+                let mm = m.clone();
+                let c = Arc::clone(&client);
+                tokio::spawn(async move {
+                    Self::handle_tcp_connection(cl_sock, mm, n_id, c).await
+                });
+            };
+        })
+    }
+
+    pub fn routine<LC,BC>(&self, config: &'static LC::Config, bc_config: &'static BC::Config) -> JoinHandle<()> 
+    where LC: LoRaWANCommunicator + 'static, BC: BlockchainClient + 'static {
+
+        let n_id = self.n_id;
+        let m = self.mpsc_tx.clone();
+
+        tokio::spawn(async move {
+            // Self::handle_colosseum_connection(mpsc_tx_clone, colosseum_config, n_id).await
+            //Self::handle_connection::<ColosseumCommunicator, BlockchainMockClient>(mpsc_tx_clone, colosseum_config, n_id, BlockchainMockClientConfig).await
+            Self::handle_connection::<LC, BC>(m, config, n_id, bc_config).await
+        })
+    }
+}
+
+
+/*
+async fn handle_colosseum_connection(mpsc_tx: MpscSender<CommandWrapper>, colosseum_config: &'static ColosseumDeviceConfig, n_id: &'static str) {
+        let client = Arc::new(BlockchainExeClient::new("orderer1.orderers.dlwan.phd:6050", "lorawan", "lorawan", None));
+        let radio_communicator = Arc::new(*ColosseumCommunicator::from_config(colosseum_config).unwrap());
+
+        loop {
+            match radio_communicator.receive_downlink(None).await {
+                Ok(mut content) => {
+                    let packet = content.remove(&colosseum_config.radio_config.spreading_factor).unwrap();
+                    if !packet.payload.is_empty() {
+                        println!("Received {} at sf {}",PrettyHexSlice(&packet.payload),&colosseum_config.radio_config.spreading_factor.value());
+                        let mhdr = MHDR::from_bytes(packet.payload[0]);
+
+                        let m = mpsc_tx.clone();
+                        let c = Arc::clone(&client);
+                        let r = Arc::clone(&radio_communicator);
+
+                        tokio::spawn(async move {
+                            let answer = Self::create_and_send_task(&mhdr, packet.payload.clone(), &m).await;
+                            match answer {
+                                Ok(ans) => {
+                                    if let Some((in_answer, dest)) = &ans {
+                                        r.send_uplink(in_answer, None, Some(*dest)).await.unwrap();
+                                    }
+                                    match c.create_uplink(&packet.payload, (ans.map(|v| v.0)).as_deref(), n_id).await {
                                         Ok(_) =>  {
                                             println!("uplink created successfully");
                                         }, 
@@ -317,42 +388,26 @@ impl NetworkController {
     }
     
     async fn handle_radio_connection(mpsc_tx: MpscSender<CommandWrapper>, radio_config: &'static RadioDeviceConfig, n_id: &'static str) {
-        let client = BlockchainExeClient::new("orderer1.orderers.dlwan.phd:6050", "lorawan", "lorawan", None);
-
-        /*let mut radio_communicator = RadioCommunication::new(RadioDeviceConfig {
-            region: Region::EU863_870,
-            spreading_factor: SpreadingFactor::new(7),
-            data_rate: DataRate::new(5),
-            rx_gain: 10,
-            tx_gain: 20,
-            bandwidth: 125_000,
-            sample_rate: 1_000_000,
-            rx_freq: 990_000_000,
-            tx_freq: 1_010_000_000,
-            rx_chan_id: 0,
-            tx_chan_id: 1,
-        });*/
-
-        let mut radio_communicator = RadioCommunication::new(*radio_config);
-        
+        let client = Arc::new(BlockchainExeClient::new("orderer1.orderers.dlwan.phd:6050", "lorawan", "lorawan", None));
+        let radio_communicator = Arc::new(*RadioCommunicator::from_config(radio_config).unwrap());
         loop {
-            match radio_communicator.receive_downlink(None, None).await {
-                Ok(content) => {
-                    let packet = content.get(&radio_config.spreading_factor).cloned().unwrap();
+            match radio_communicator.receive_downlink(None).await {
+                Ok(mut content) => {
+                    let packet = content.remove(&radio_config.spreading_factor).unwrap();
                     if !packet.payload.is_empty() {
                         println!("Received {} at sf {}",PrettyHexSlice(&packet.payload),&radio_config.spreading_factor.value());
                         let mhdr = MHDR::from_bytes(packet.payload[0]);
 
                         let mpsc_clone = mpsc_tx.clone();
-                        let client_clone = client.clone();
-                        let mut radio_communicator_clone = radio_communicator;
+                        let client_clone = Arc::clone(&client);
+                        let radio_clone = Arc::clone(&radio_communicator);
+
                         tokio::spawn(async move {
-                            let answer = Self::create_and_send_task(&mhdr, &packet.payload, &mpsc_clone).await;
+                            let answer = Self::create_and_send_task(&mhdr, packet.payload.clone(), &mpsc_clone).await;
                             match answer {
                                 Ok(ans) => {
-                                    //TODO UNCONFIRMED DATA UP NON SEGNALA SE IL PACCHETTO NON È VALIDO, RITORNARE UN CAMPO RESULT INVECE CHE NULLA
                                     if let Some((in_answer, dest)) = &ans {
-                                        radio_communicator_clone.send_uplink(in_answer, None, Some(*dest)).await.unwrap();
+                                        radio_clone.send_uplink(in_answer, None, Some(*dest)).await.unwrap();
                                     }
                                     match client_clone.create_uplink(&packet.payload, (ans.map(|v| v.0)).as_deref(), n_id).await {
                                         Ok(_) =>  {
@@ -374,68 +429,4 @@ impl NetworkController {
             }
         }
     }
-
-    pub async fn routine(&self, sdr_code: Option<&'static str>) -> Result<(), NCError> {
-        let (mpsc_tx, mpsc_rx) = mpsc::channel::<CommandWrapper>(128);
-        
-        let n_id = self.n_id;
-        tokio::spawn(async move {
-            Self::handle_commands_task(mpsc_rx).await
-        });
-
-        let mut initialized = false;
-
-        let c_spawn = if let (Some(sdr_code), Some(colosseum_config)) = (sdr_code, self.colosseum_config) {
-            initialized = true;
-            let mpsc_tx_clone = mpsc_tx.clone();
-            Some(tokio::spawn( async move {
-                Self::handle_colosseum_connection(mpsc_tx_clone, colosseum_config, sdr_code, n_id).await
-            }))
-        } else {
-            None
-        };
-        
-        let r_spawn = if let Some(radio_config) = self.radio_config {
-            initialized = true;
-            let mpsc_tx_clone = mpsc_tx.clone();
-            Some(tokio::spawn( async move {
-                Self::handle_radio_connection(mpsc_tx_clone, radio_config, n_id).await
-            }))
-        } else {
-            None
-        };
-        
-        if let Some(tcp_config) = self.tcp_config {
-            initialized = true;
-            
-            //TODO let nc_addr: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), self.config.tcp_nc_port);
-            let dev_addr: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), tcp_config.tcp_dev_port);
-
-            let dev_socket = TcpListener::bind(dev_addr).await.unwrap();
-            println!("Waiting for connections...");
-            while let Ok((cl_sock, _addr)) = dev_socket.accept().await {
-                let mpsc_tx_clone = mpsc_tx.clone();
-                println!("Received connection");
-                tokio::spawn(async move {
-                    Self::handle_tcp_connection(cl_sock, mpsc_tx_clone, n_id).await
-                });
-            };
-        }
-        assert!(initialized,"No valid configuration provided");
-
-        if let Some(h) = c_spawn {
-            let r = h.await;
-            if let Err(e) = r {
-                eprintln!("{e:?}");
-            }
-        }
-        if let Some(h) = r_spawn {
-            let r = h.await;
-            if let Err(e) = r {
-                eprintln!("{e:?}");
-            }
-        }
-
-        Ok(())
-    }
-}
+*/

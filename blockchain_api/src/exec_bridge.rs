@@ -2,6 +2,7 @@ use std::net::IpAddr;
 use std::{collections::HashMap, time::SystemTime};
 use lorawan::{utils::{PrettyHexSlice, eui::EUI64}, device::Device};
 use serde::{Serialize, Deserialize};
+use serde_json::Value;
 use tokio::process::Command;
 
 
@@ -9,18 +10,18 @@ use crate::{BlockchainDeviceSession, BlockchainDeviceConfig, BlockchainState, Bl
 
 #[allow(non_snake_case)]
 #[derive(Serialize)]
-struct BlockchainArgs {
+pub struct BlockchainArgs {
     Args: Vec<String>
 }
 
-#[derive(Deserialize)]
-struct BlockchainAns<T> {
+#[derive(Deserialize, Debug)]
+pub struct BlockchainAns<T> {
     content: Option<T>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[allow(dead_code)]
-struct HyperledgerInvokeAns {
+pub struct HyperledgerInvokeAns {
     level: String,
     ts: f32,
     name: String,
@@ -46,7 +47,13 @@ pub struct BlockchainExeClient {
     orderer_ca_file_path: Option<String>,
 }
 
-
+#[derive(Clone)]
+pub struct BlockchainExeConfig {
+    pub orderer_addr: String,
+    pub channel_name: String,
+    pub chaincode_name: String,
+    pub orderer_ca_file_path: Option<String>,
+}
 
 impl BlockchainExeClient {
     pub fn new<I>(addr: I, channel_name: I, chaincode_name: I, orderer_ca_file_path: Option<I>) -> BlockchainExeClient
@@ -99,6 +106,9 @@ impl BlockchainExeClient {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
         
+        //println!("stdout: {}", stdout);
+        //println!("stderr: {}", stderr);
+
         if invoke || stdout.is_empty() && !stderr.is_empty() {
             let last_stderr_line = stderr.take_last_line().ok_or("Stderr empty".to_owned())?;
             let ans = serde_json::from_str::<HyperledgerInvokeAns>(&last_stderr_line).or::<String>(Ok(HyperledgerInvokeAns {
@@ -108,6 +118,8 @@ impl BlockchainExeClient {
                 caller: "".to_owned(),
                 msg: last_stderr_line.clone(),
             }))?;
+
+            println!("{ans:?}");
 
             let mut key: Option<&str> = None;
             let mut value: Option<&str> = None;
@@ -134,7 +146,7 @@ impl BlockchainExeClient {
                         key = Some(t_key);
                         value = Some(&t_value[2..=len-2]);
                     } else {
-                        //println!("{}", &t_value[2..=len-2]);
+                        println!("{}", &t_value[2..=len-2]);
                         return serde_json::from_str::<BlockchainAns<T>>(&t_value[2..=len-2]).map_err(|e| e.to_string());       
                     }
                 }                
@@ -151,13 +163,24 @@ impl BlockchainExeClient {
                 Err(format!("status: {}, {}: {}", status, key.unwrap_or(""), value.unwrap_or("")))
             }
         }
-        else { serde_json::from_str::<BlockchainAns<T>>(stdout.trim()).map_err(|e| e.to_string()) }
+        else {
+            let a = serde_json::from_str::<Value>(stdout.trim()).unwrap();
+            Ok(BlockchainAns {
+                content: serde_json::from_str::<T>(a.get("content").unwrap().as_str().unwrap()).ok(),
+            }) //FIXME non era cosi non so che succede, controllare il metodo di creazione dei device
+            //serde_json::from_str::<BlockchainAns<T>>(stdout.trim()).map_err(|e| e.to_string()) 
+        }
     }
 }
 
 #[async_trait::async_trait]
 impl crate::BlockchainClient for BlockchainExeClient {
-    
+    type Config = BlockchainExeConfig;
+
+    async fn from_config(config: &Self::Config) -> Result<Box<Self>, BlockchainError> {
+        Ok(Box::new(Self::new(config.orderer_addr.clone(), config.channel_name.clone(), config.chaincode_name.clone(), config.orderer_ca_file_path.clone())))
+    }
+
     async fn get_hash(&self) -> Result<String, BlockchainError> {
         let args = BlockchainArgs {
             Args: vec![

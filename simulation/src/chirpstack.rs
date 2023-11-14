@@ -3,7 +3,7 @@
 use core::panic;
 use std::{collections::{HashMap, HashSet}, time::{Duration, Instant, SystemTime}, fs::File, path::Path, process::Command as SyncCommand};
 
-use lorawan_device::{tcp_device::TcpDevice, lorawan_device::LoRaWANDevice, communicators::LoRaWANCommunication};
+use lorawan_device::{tcp_device::TcpDevice, lorawan_device::LoRaWANDevice, communicator::LoRaWANCommunicator, configs::TcpDeviceConfig};
 use hex::FromHex;
 use lorawan::{
     device::{Device, DeviceClass, LoRaWANVersion},
@@ -211,7 +211,7 @@ fn create_uplink(payload: &[u8]) -> UplinkFrame {
 
 }
 
-async fn device_routine<T: LoRaWANCommunication + Send + Sync>(mut fd: LoRaWANDevice<T>, i: usize, sender: mpsc::Sender<Msg>, start: Instant) {
+async fn device_routine<T: LoRaWANCommunicator + Send + Sync>(mut fd: LoRaWANDevice<T>, i: usize, sender: mpsc::Sender<Msg>, start: Instant) {
     //println!("{fd:?}");
     let client = Client::new("tcp://127.0.0.1:1883").unwrap();
     let down_topic = "eu868/gateway/06b302c2f002cfa3/command/down";
@@ -420,7 +420,10 @@ pub async fn main_chirpstack() {
             Key::from_hex(&device.deviceKeys.appKey).unwrap(),
             LoRaWANVersion::V1_0_3,
         );
-        let fd = TcpDevice::create(device, "localhost".to_owned(), 9999).await;
+        let fd = TcpDevice::create(device, &TcpDeviceConfig {
+            addr: "localhost".to_owned(),
+            port: 9999,
+        }).await;
         lorawan_devices.push(fd);
         println!("Got {i} device");
     }

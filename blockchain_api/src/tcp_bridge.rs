@@ -24,9 +24,21 @@ impl BlockchainTCPClient {
     }
 }
 
+#[derive(Clone)]
+pub struct BlockchainTCPConfig {
+    address: Ipv4Addr,
+    port: u16,
+}
 
 #[async_trait::async_trait]
 impl crate::BlockchainClient for BlockchainTCPClient { 
+    type Config = BlockchainTCPConfig;
+
+    #[allow(deprecated)]
+    async fn from_config(config: &Self::Config) -> Result<Box<Self>, BlockchainError> {
+        Ok(Box::new(Self::new(config.address, config.port)))
+    }
+
     async fn get_hash(&self) -> Result<String, BlockchainError> {
         match self.client.get(format!(
             "http://{}:{}/hash",

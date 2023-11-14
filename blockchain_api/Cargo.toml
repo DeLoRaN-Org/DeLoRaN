@@ -13,3 +13,4 @@ tokio = { version = "1", features = ["full"] }
 serde = {version = "1.0.152", features= ["derive"]}
 async-trait = "0.1.72"
 thiserror = "1.0.47"
+rand = "0.8.5"

@@ -22,8 +22,8 @@ pub enum NCError {
 }
 
 impl From<BlockchainError> for NCError {
-    fn from(value: BlockchainError) -> Self {
-        Self::BlockchainError(value)
+    fn from(e: BlockchainError) -> Self {
+        Self::BlockchainError(e)
     }
 }
 

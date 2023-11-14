@@ -1,5 +1,4 @@
 //use std::net::{SocketAddrV4, Ipv4Addr, SocketAddr};
-
 use lorawan::utils::eui::EUI64;
 use tokio::sync::oneshot; // net::TcpSocket, io::AsyncWriteExt};
 use crate::utils::error::NCError;
@@ -19,12 +18,13 @@ pub enum NCTaskResponse {
     UnConfirmedDataUp { result: Result<(), NCError> },
     ConfirmedDataUp { result: Result<(Vec<u8>, EUI64), NCError> }
 }
-pub struct CommandWrapper(pub NCTaskCommand, pub OneshotSender<NCTaskResponse>);
+
+pub type CommandWrapper = (NCTaskCommand, OneshotSender<NCTaskResponse>);
 
 
 pub async fn send_task(cmd: NCTaskCommand, mpsc_tx: &MpscSender<CommandWrapper>) -> Result<NCTaskResponse, NCError> {
     let (os_tx, os_rx) = oneshot::channel::<NCTaskResponse>();
-    mpsc_tx.send(CommandWrapper(cmd, os_tx)).await
+    mpsc_tx.send((cmd, os_tx)).await
         .map_err(|e| NCError::CommandTransmissionFailed(e.to_string()))?;
     os_rx.await.map_err(|e| e.into())
 }

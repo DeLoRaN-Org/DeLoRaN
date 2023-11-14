@@ -1,8 +1,8 @@
     
-use std::{fs, collections::HashMap, ops::Deref, process::{Command, Stdio}, io::{Write, Read}, time::Duration};
+use std::{fs, collections::HashMap, ops::Deref, process::{Command, Stdio}, io::Write, time::Duration};
 use blockchain_api::BlockchainDeviceConfig;
-use lorawan_device::{colosseum_device::ColosseumDevice, configs::{RadioDeviceConfig, DeviceConfig, DeviceConfigType}, communicators::{extract_dev_id, MockCommunicator}, lorawan_device::LoRaWANDevice};
-use lorawan::{device::{Device, DeviceClass, LoRaWANVersion, session_context::{ApplicationSessionContext, NetworkSessionContext, SessionContext}}, regional_parameters::region::{RegionalParameters, Region}, utils::{eui::EUI64, PrettyHexSlice}, encryption::key::Key, physical_parameters::{SpreadingFactor, DataRate}};
+use lorawan_device::{configs::{RadioDeviceConfig, DeviceConfig, DeviceConfigType, ColosseumDeviceConfig}, communicator::extract_dev_id};
+use lorawan::{device::{Device, DeviceClass, LoRaWANVersion}, regional_parameters::region::{RegionalParameters, Region}, utils::{eui::EUI64, PrettyHexSlice}, encryption::key::Key, physical_parameters::{SpreadingFactor, DataRate}};
 use serde::{Serialize, Deserialize};
 use serde_json::json;
 
@@ -51,12 +51,15 @@ fn create_device_command(device: &Device) -> String {
 }
 
 fn create_configs(devices_to_skip: usize, num_devices: usize, devices_per_device: usize) {
-    let file_content = fs::read_to_string("../simulation/devices.csv").unwrap();
+    let file_content = fs::read_to_string("../simulation/devices_augmented.csv").unwrap();
 
     let mut commands = vec![];
     let mut devices = Vec::new();
 
     let mut index = 0;
+    let colosseum_address = "192.169.40.2".parse().unwrap();
+
+
     file_content.split('\n').skip(devices_to_skip).take(num_devices * devices_per_device).for_each(|line| {
         let splitted = line.split(',').collect::<Vec<&str>>();
         let dev_eui = splitted[0];
@@ -77,16 +80,22 @@ fn create_configs(devices_to_skip: usize, num_devices: usize, devices_per_device
             sample_rate: 1000000.0,
             rx_chan_id: 0,
             tx_chan_id: 1,
-            dev_id: extract_dev_id(Some(*d.dev_eui())) //FIXME 0 per non filtrare ma il bufferedReceiver dovrebbe risolvere
+            dev_id: extract_dev_id(Some(*d.dev_eui()))
         };
         commands.push(json!({
             "dev_eui": dev_eui,
             "command": create_device_command(&d)
         }));
 
-        let cd = ColosseumDevice::create(d, "192.169.40.2".parse().unwrap(), r, "../preloader/src/sdr-lora-merged.py");
-        let config = cd.extract_config();
-        devices.push(config.get("device").unwrap().clone());
+        let config = DeviceConfig {
+            configuration: d,
+            dtype: DeviceConfigType::COLOSSEUM(ColosseumDeviceConfig {
+                radio_config: r,
+                address: colosseum_address,
+                sdr_code: String::from("./src/sdr-lora-merged.py")
+            }),
+        };
+        devices.push(serde_json::to_value(config).unwrap());
 
         if devices.len() == devices_per_device {
             let path = format!("./configs/{index}_config.json");
@@ -119,9 +128,9 @@ fn send_commands(nc_endpoints: &[&str], devices_per_device: usize) {
         let mut c = Command::new("ssh").stdin(Stdio::piped()).stdout(Stdio::piped()).arg(endpoint).spawn().unwrap();
         
         let stdin = c.stdin.as_mut().unwrap();
-        let stdout = c.stdout.as_mut().unwrap();
+        //let stdout = c.stdout.as_mut().unwrap();
     
-        let mut s = String::with_capacity(2048);
+        //let mut s = String::with_capacity(2048);
     
         stdin.write_all("source /root/mini_scripts/source_peer.sh\n".as_bytes()).unwrap();
     
@@ -130,59 +139,66 @@ fn send_commands(nc_endpoints: &[&str], devices_per_device: usize) {
             c.command.push('\n');
             println!("{}", c.command);
             stdin.write_all(c.command.as_bytes()).unwrap();
-            unsafe {
-                stdout.read_exact(s.as_bytes_mut()).unwrap();
-            }
+            //unsafe {
+            //    stdout.read_exact(s.as_bytes_mut()).unwrap();
+            //}
             std::thread::sleep(Duration::from_millis(500));
         }
         c.wait().unwrap();
     }
 }
 
-fn create_initialized_device() -> Device {
-    let mut device = Device::new(
-        DeviceClass::A,
-        None,
-        EUI64::from_hex("50DE2646F9A7AC8E").unwrap(),
-        EUI64::from_hex("DCBC65F607A47DEA").unwrap(),
-        Key::from_hex("BBF326BE9AC051453AA616410F110EE7").unwrap(),
-        Key::from_hex("BBF326BE9AC051453AA616410F110EE7").unwrap(),
-        LoRaWANVersion::V1_1,
-    );
-
-    let network_context = NetworkSessionContext::new(
-        Key::from_hex("75C3EB8BA73C9A0D5F74BB3E02E7EF9E").unwrap(),
-        Key::from_hex("75C3EB8BA73C9A0D5F74BB3E02E7EF9E").unwrap(),
-        Key::from_hex("75C3EB8BA73C9A0D5F74BB3E02E7EF9E").unwrap(),
-        [0x60, 0x00, 0x08],
-        [0xe0, 0x11, 0x3B, 0x2A],
-        0,
-        1,
-        0,
-    );
-
-    let application_context = ApplicationSessionContext::new(
-        Key::from_hex("5560CC0B0DC37BEBBFB39ACD337DD34D").unwrap(),
-        0,
-    );
-
-    device.set_activation_abp(SessionContext::new(application_context, network_context));
-    device
+#[tokio::main]
+async fn main() {
+    let nc_endpoint = ["wineslab-042", "wineslab-039"];
+    let devices_endpoint = ["wineslab-053", "wineslab-057"];
+    let devices_per_device = 300;
+    create_configs(0, devices_endpoint.len(), devices_per_device);
+    send_commands(&nc_endpoint, devices_per_device);
 }
 
 
-#[tokio::main]
-async fn main() {
-    //let devices = ["wineslab-072", "wineslab-049"];
-    //let devices_per_device = 100;
-    //create_configs(0, devices.len(), devices_per_device);
-    //send_commands(&devices, devices_per_device);
+#[cfg(test)]
+mod test {
+    use lorawan::{device::{Device, DeviceClass, LoRaWANVersion, session_context::{NetworkSessionContext, ApplicationSessionContext, SessionContext}}, utils::eui::EUI64, encryption::key::Key};
+    use lorawan_device::{debug_device::DebugDevice, lorawan_device::LoRaWANDevice, mock_device::MockCommunicator};
 
-    let device = create_initialized_device();
-    let mut ld = LoRaWANDevice::new(device, MockCommunicator, DeviceConfig {
-        dtype: DeviceConfigType::MOCK,
-        configuration: device,
-    });
+    fn create_initialized_device() -> Device {
+        let mut device = Device::new(
+            DeviceClass::A,
+            None,
+            EUI64::from_hex("50DE2646F9A7AC8E").unwrap(),
+            EUI64::from_hex("DCBC65F607A47DEA").unwrap(),
+            Key::from_hex("BBF326BE9AC051453AA616410F110EE7").unwrap(),
+            Key::from_hex("BBF326BE9AC051453AA616410F110EE7").unwrap(),
+            LoRaWANVersion::V1_1,
+        );
+    
+        let network_context = NetworkSessionContext::new(
+            Key::from_hex("75C3EB8BA73C9A0D5F74BB3E02E7EF9E").unwrap(),
+            Key::from_hex("75C3EB8BA73C9A0D5F74BB3E02E7EF9E").unwrap(),
+            Key::from_hex("75C3EB8BA73C9A0D5F74BB3E02E7EF9E").unwrap(),
+            [0x60, 0x00, 0x08],
+            [0xe0, 0x11, 0x3B, 0x2A],
+            0,
+            1,
+            0,
+        );
+    
+        let application_context = ApplicationSessionContext::new(
+            Key::from_hex("5560CC0B0DC37BEBBFB39ACD337DD34D").unwrap(),
+            0,
+        );
+    
+        device.set_activation_abp(SessionContext::new(application_context, network_context));
+        device
+    }
+    
 
-    ld.send_uplink(Some("###  confirmed 5 message  ###".as_bytes()), false, Some(1), None).await.unwrap();
+
+    #[tokio::test]
+    async fn test() {
+        let mut ld = DebugDevice::from(LoRaWANDevice::new(create_initialized_device(), MockCommunicator));
+        ld.send_uplink(Some("###  confirmed 5 message  ###".as_bytes()), false, Some(1), None).await.unwrap();
+    }
 }

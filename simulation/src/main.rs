@@ -5,7 +5,7 @@ mod compiled;
 use std::{time::{Duration, SystemTime}, fs::{self, File}, net::Ipv4Addr, path::Path, process::Command as SyncCommand, str::FromStr};
 use blockchain_api::{BlockchainClient, exec_bridge::BlockchainExeClient};
 use chirpstack::main_chirpstack;
-use lorawan_device::tcp_device::TcpDevice;
+use lorawan_device::{tcp_device::TcpDevice, configs::TcpDeviceConfig};
 use lorawan::{utils::{eui::EUI64, PrettyHexSlice}, device::{Device, DeviceClass, LoRaWANVersion}, regional_parameters::region::{Region, RegionalParameters}, encryption::key::Key};
 use tokio::{net::TcpStream, time::Instant, process::Command, sync::mpsc};
 use std::io::Write;
@@ -225,7 +225,10 @@ async fn blockchain_main() {
 
             let d = Device::new(DeviceClass::A, Some(RegionalParameters::new(Region::EU863_870)), dev_eui, join_eui, key, key, LoRaWANVersion::V1_0_4);
             println!("before creating");
-            let mut device = TcpDevice::create(d, nc_ip, 9090).await;
+            let mut device = TcpDevice::create(d, &TcpDeviceConfig {
+                addr: nc_ip,
+                port: 9090,
+            }).await;
             println!("after creating");
 
             if let Some(_s) = device.session() {

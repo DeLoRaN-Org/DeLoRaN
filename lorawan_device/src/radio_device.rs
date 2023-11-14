@@ -1,31 +1,36 @@
+use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::fmt::Debug;
+use std::time::Duration;
+use async_trait::async_trait;
 use blockchain_api::BlockchainClient;
 use blockchain_api::exec_bridge::BlockchainExeClient;
+use lorawan::physical_parameters::SpreadingFactor;
 use lorawan::{device::Device, utils::eui::EUI64};
 
-use crate::configs::{RadioDeviceConfig, DeviceConfigType, DeviceConfig};
-use crate::{communicators::RadioCommunication, lorawan_device::LoRaWANDevice};
+use crate::communicator::{LoRaWANCommunicator, CommunicatorError, LoRaPacket};
+use crate::configs::RadioDeviceConfig;
+use crate::lorawan_device::LoRaWANDevice;
 
 pub struct RadioDevice {
-    device: LoRaWANDevice<RadioCommunication>,
+    device: LoRaWANDevice<RadioCommunicator>,
 }
 
 impl RadioDevice  {
-    pub fn create(device: Device, config: RadioDeviceConfig) -> LoRaWANDevice<RadioCommunication> {
-        LoRaWANDevice::new(device, RadioCommunication::new(config), DeviceConfig { configuration: device, dtype: DeviceConfigType::RADIO(config)  })
+    pub async fn create(device: Device, config: &RadioDeviceConfig) -> LoRaWANDevice<RadioCommunicator> {
+        LoRaWANDevice::new(device, *RadioCommunicator::from_config(config).await.unwrap())
     }
 
-    pub async fn from_blockchain(dev_eui: &EUI64, config: RadioDeviceConfig) -> LoRaWANDevice<RadioCommunication> {
+    pub async fn from_blockchain(dev_eui: &EUI64, config: &RadioDeviceConfig) -> LoRaWANDevice<RadioCommunicator> {
         let client = BlockchainExeClient::new("orderer1.orderers.dlwan.phd:6050", "lorawan", "lorawan", None);
         let device = client.get_device(dev_eui).await.unwrap();
 
-        LoRaWANDevice::new(device, RadioCommunication::new(config), DeviceConfig { configuration: device, dtype: DeviceConfigType::RADIO(config)  })
+        LoRaWANDevice::new(device, *RadioCommunicator::from_config(config).await.unwrap())
     }
 }
 
 impl Deref for RadioDevice {
-    type Target=LoRaWANDevice<RadioCommunication>;
+    type Target=LoRaWANDevice<RadioCommunicator>;
 
     fn deref(&self) -> &Self::Target {
         &self.device
@@ -41,5 +46,35 @@ impl DerefMut for RadioDevice {
 impl Debug for RadioDevice {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RadioDevice").field("device", &self.device).finish()
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct RadioCommunicator {
+    pub config: RadioDeviceConfig,
+}
+
+#[async_trait]
+impl LoRaWANCommunicator for RadioCommunicator {
+    type Config = RadioDeviceConfig;
+
+    async fn from_config(config: &Self::Config) -> Result<Box<Self>, CommunicatorError> {
+        Ok(Box::new(Self { config: *config }))
+    }
+
+    async fn send_uplink(
+        &self,
+        _bytes: &[u8],
+        _src: Option<EUI64>,
+        _dest: Option<EUI64>,
+    ) -> Result<(), CommunicatorError> {
+        todo!()
+    }
+    
+    async fn receive_downlink(
+        &self,
+        _timeout: Option<Duration>,
+    ) -> Result<HashMap<SpreadingFactor, LoRaPacket>, CommunicatorError> {
+        todo!()
     }
 }

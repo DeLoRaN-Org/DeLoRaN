@@ -2,11 +2,11 @@ use core::panic;
 use std::time::Duration;
 
 use lorawan_device::{
-    communicators::{ColosseumCommunication, LoRaWANCommunication},
-    configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType},
+    communicator::LoRaWANCommunicator,
+    configs::{DeviceConfig, DeviceConfigType},
     lorawan_device::LoRaWANDevice,
     radio_device::RadioDevice,
-    tcp_device::TcpDevice,
+    tcp_device::TcpDevice, colosseum_device::{ColosseumDevice, ColosseumCommunicator}, debug_device::DebugDevice,
 };
 use tokio::time::sleep;
 
@@ -16,7 +16,7 @@ pub trait Run {
 }
 
 #[async_trait::async_trait]
-impl<T: LoRaWANCommunication + Send + Sync> Run for LoRaWANDevice<T> {
+impl<T: LoRaWANCommunicator + Send + Sync> Run for LoRaWANDevice<T> {
     async fn run(&mut self) {
         if let Some(_s) = self.session() {
             println!("Device already initialized:");
@@ -28,15 +28,14 @@ impl<T: LoRaWANCommunication + Send + Sync> Run for LoRaWANDevice<T> {
             );
             //let duration = 10;
             //sleep(Duration::from_secs(duration)).await;
+            self.set_dev_nonce(7);
             while let Err(e) = self.send_join_request().await {
-                println!("Error joining: {e:?}");
-                panic!("dio buono");
+                panic!("Error joining: {e:?}");
             };
             println!("{}", **self);
         }
 
         let duration = 90_u64;
-
         for _ in 0..1 {
             for i in 0..100 {
                 self.send_uplink(
@@ -53,7 +52,7 @@ impl<T: LoRaWANCommunication + Send + Sync> Run for LoRaWANDevice<T> {
     }
 }
 
-pub async fn device_main(configs: Vec<&'static DeviceConfig>, sdr_code: &'static str) {
+pub async fn device_main(configs: Vec<&'static DeviceConfig>) {
     let mut handlers = Vec::new();
     let mut colosseum_communications = None;
 
@@ -61,43 +60,33 @@ pub async fn device_main(configs: Vec<&'static DeviceConfig>, sdr_code: &'static
         match &config.dtype {
             DeviceConfigType::TCP(c) => {
                 handlers.push(tokio::spawn(async {
-                    TcpDevice::create(config.configuration, c.addr.clone(), c.port)
-                        .await
+                    DebugDevice::from(TcpDevice::create(config.configuration, c).await)
                         .run()
                         .await;
                 }));
             }
             DeviceConfigType::RADIO(c) => {
                 handlers.push(tokio::spawn(async {
-                    RadioDevice::create(config.configuration, *c).run().await;
+                    DebugDevice::from(RadioDevice::create(config.configuration, c).await).run().await;
                 }));
             }
             DeviceConfigType::COLOSSEUM(c) => {
                 if colosseum_communications.is_none() {
                     colosseum_communications = Some(
-                        ColosseumCommunication::new(c.address, c.radio_config, sdr_code),
+                        *ColosseumCommunicator::from_config(c).await.unwrap(),
                     );
                 }
                 let cloned = colosseum_communications.as_ref().cloned().unwrap();
+
+
                 handlers.push(tokio::spawn(async {
-                    LoRaWANDevice::new(
-                        config.configuration,
-                        cloned,
-                        DeviceConfig {
-                            configuration: config.configuration,
-                            dtype: DeviceConfigType::COLOSSEUM(ColosseumDeviceConfig {
-                                radio_config: c.radio_config,
-                                address: c.address,
-                            }),
-                        },
-                    )
-                    .run()
-                    .await;
+                    DebugDevice::from(ColosseumDevice::with_shared_communicator(config.configuration, cloned).await)
+                    .run().await;
                 }));
                 //ColosseumDevice::create(config.configuration, c.address, c.radio_config, sdr_code).run().await;
             },
             _ => {
-                println!("No valid configuration if mockconfiguration is in config file")
+                println!("Not a valid configuration if mockconfiguration is in config file")
             }
         };
         tokio::time::sleep(Duration::from_secs(17)).await;

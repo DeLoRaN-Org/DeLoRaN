@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use serde::{Deserialize, Serialize};
 
 use crate::regional_parameters::region::Region;
@@ -21,6 +23,12 @@ impl SpreadingFactor {
             7..=12 => self.0,
             13.. => 12,
         }
+    }
+}
+
+impl Display for SpreadingFactor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SF{}", self.value())
     }
 }
 

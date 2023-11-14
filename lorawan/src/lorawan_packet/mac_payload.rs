@@ -137,7 +137,7 @@ impl MACPayload {
 
 impl ToBytesWithContext for MACPayload {
     fn to_bytes_with_context(&self, device_context: &Device) -> Result<Vec<u8>, LoRaWANError> {
-        let mut ret = Vec::new();
+        let mut ret = Vec::with_capacity(64);
 
         if  (!self.is_application() && self.fhdr.fctrl().f_opts_len() > 0) ||
             (self.fport.is_some() && self.frm_payload.is_none()) || 

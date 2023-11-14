@@ -22,11 +22,17 @@ pub struct RadioDeviceConfig {
     pub sample_rate: f32,
     pub rx_chan_id: u8,
     pub tx_chan_id: u8,
-    pub dev_id: u8
+    pub dev_id: u16
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ColosseumDeviceConfig {
+    pub radio_config: RadioDeviceConfig,
+    pub address: IpAddr,
+    pub sdr_code: String,
+}
+
+pub struct MockDeviceConfig {
     pub radio_config: RadioDeviceConfig,
     pub address: IpAddr,
 }
@@ -42,6 +48,6 @@ pub enum DeviceConfigType {
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct DeviceConfig {
-    pub configuration: Device,
     pub dtype: DeviceConfigType,
+    pub configuration: Device,
 }

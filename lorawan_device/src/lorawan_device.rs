@@ -1,21 +1,26 @@
 use std::{ops::{Deref, DerefMut}, cmp::Ordering, time::{Instant, SystemTime, Duration}, io::Write};
 use std::fmt::Debug;
 use lorawan::{device::Device, utils::{traits::ToBytes, errors::LoRaWANError, PrettyHexSlice}, lorawan_packet::{LoRaWANPacket, payload::Payload, mac_commands::{EDMacCommands, NCMacCommands}}};
-use serde_json::json;
 use std::fs::OpenOptions;
-use crate::{communicators::{LoRaWANCommunication, CommunicationError}, configs::DeviceConfig};
+use crate::communicator::{LoRaWANCommunicator, CommunicatorError};
 
 pub struct LoRaWANDevice<T> 
-where T: LoRaWANCommunication + Send + Sync {
+where T: LoRaWANCommunicator + Send + Sync {
     device: Device,
     communication: T,
-    config: DeviceConfig,
+    //config: DeviceConfig,
 }
 
-impl<T> LoRaWANDevice<T> where T: LoRaWANCommunication + Send + Sync {
-    pub fn new(device: Device, communication: T, config: DeviceConfig) -> Self {
+impl<T: LoRaWANCommunicator + Send + Sync> From<LoRaWANDevice<T>> for (Device, T) {
+    fn from(val: LoRaWANDevice<T>) -> Self {
+        (val.device, val.communication)
+    }
+}
+
+impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
+    pub fn new(device: Device, communication: T/*, config: DeviceConfig*/) -> Self {
         Self {
-            device, communication, config
+            device, communication//, config
         }
     }
 
@@ -35,7 +40,7 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunication + Send + Sync {
             })
     }
 
-    pub async fn send_uplink(&mut self, payload: Option<&[u8]>, confirmed: bool, fport: Option<u8>, fopts: Option<&[EDMacCommands]>) -> Result<(), CommunicationError> {
+    pub async fn send_uplink(&mut self, payload: Option<&[u8]>, confirmed: bool, fport: Option<u8>, fopts: Option<&[EDMacCommands]>) -> Result<(), CommunicatorError> {
         let fopts: Option<Vec<u8>> = LoRaWANDevice::<T>::fold_maccomands(fopts);
         let packet = self.device.create_uplink(payload, confirmed, fport, fopts)?;
         self.communication.send_uplink(&packet, Some(*self.dev_eui()),None).await.unwrap();
@@ -43,7 +48,7 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunication + Send + Sync {
 
             //TODO REMOVE PERFORMANCES CHECKS
             let before = Instant::now();
-            let payloads = self.communication.receive_downlink(Some(*self.dev_eui()), Some(Duration::from_secs(15))).await.unwrap();
+            let payloads = self.communication.receive_downlink(Some(Duration::from_secs(15))).await.unwrap();
             let after = Instant::now();
             
             let mut file = OpenOptions::new()
@@ -93,13 +98,13 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunication + Send + Sync {
 
 
 
-    pub async fn send_join_request(&mut self) -> Result<(), CommunicationError> {
+    pub async fn send_join_request(&mut self) -> Result<(), CommunicatorError> {
         let join_request = self.device.create_join_request()?;
         println!("{}", PrettyHexSlice(&join_request));
         
         
         self.communication.send_uplink(&join_request, Some(*self.dev_eui()), None).await?;
-        let payloads = self.communication.receive_downlink(Some(*self.dev_eui()), Some(Duration::from_secs(15))).await?;
+        let payloads = self.communication.receive_downlink(Some(Duration::from_secs(15))).await?;
         
         //TODO ESTRARRE MEGLIO I PAYLOAD
         let content = payloads.values().next().ok_or(LoRaWANError::MissingDownlink)?;
@@ -128,7 +133,7 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunication + Send + Sync {
         Ok(())
     }
     
-    pub async fn send_maccommands(&mut self, mac_commands: &[EDMacCommands], confirmed: bool) -> Result<(), CommunicationError> {        
+    pub async fn send_maccommands(&mut self, mac_commands: &[EDMacCommands], confirmed: bool) -> Result<(), CommunicatorError> {        
         let content: Vec<u8> = self.device.create_maccommands(mac_commands)?;
         let uplink = self.device.create_uplink(Some(&content), confirmed, Some(0), None)?;
         self.communication.send_uplink(&uplink, Some(*self.dev_eui()), None).await
@@ -148,14 +153,14 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunication + Send + Sync {
     }
 
 
-    pub fn extract_config(&self) -> serde_json::Value {
-        json!({
-            "device": self.config
-        })
-    }
+    //pub fn extract_config(&self) -> serde_json::Value {
+    //    json!({
+    //        "device": self.config
+    //    })
+    //}
 }
 
-impl <T> Deref for LoRaWANDevice<T> where T: LoRaWANCommunication + Send + Sync {
+impl <T> Deref for LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
     type Target=Device;
 
     fn deref(&self) -> &Self::Target {
@@ -163,13 +168,13 @@ impl <T> Deref for LoRaWANDevice<T> where T: LoRaWANCommunication + Send + Sync 
     }
 }
 
-impl <T> DerefMut for LoRaWANDevice<T> where T: LoRaWANCommunication + Send + Sync {
+impl <T> DerefMut for LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.device
     }
 }
 
-impl <T> Debug for LoRaWANDevice<T> where T: LoRaWANCommunication + Send + Sync {
+impl <T> Debug for LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LoRaWANDevice").field("device", &self.device).finish()
     }
