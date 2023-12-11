@@ -64,6 +64,13 @@ impl <T: LoRaWANCommunicator> DebugCommunicator<T> {
     pub fn set_id(&mut self, id: &EUI64) {
         self.id = Some(*id)
     }
+
+    pub fn from(c: T, id: Option<EUI64>) -> DebugCommunicator<T> where T: LoRaWANCommunicator + Send + Sync {
+        DebugCommunicator {
+            communicator: c,
+            id
+        }
+    }
 }
 
 impl<T: LoRaWANCommunicator> Deref for DebugCommunicator<T> {
@@ -98,7 +105,7 @@ impl<T: LoRaWANCommunicator> LoRaWANCommunicator for DebugCommunicator<T> {
     ) -> Result<(), CommunicatorError> {
         println!(
             "[{:?}] Device {} sending {} to {}",
-            SystemTime::UNIX_EPOCH.elapsed().unwrap().as_secs(),
+            SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(),
             self.id.map(|v| PrettyHexSlice(&*v).to_string())
                 .unwrap_or("Unknown".to_owned()),
             PrettyHexSlice(bytes),
@@ -114,10 +121,20 @@ impl<T: LoRaWANCommunicator> LoRaWANCommunicator for DebugCommunicator<T> {
     ) -> Result<HashMap<SpreadingFactor, LoRaPacket>, CommunicatorError> {
         println!(
             "[{:?}] Device {} Waiting for downlink",
-            SystemTime::UNIX_EPOCH.elapsed().unwrap().as_secs(),
+            SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(),
             self.id.map(|v| PrettyHexSlice(&*v).to_string())
                 .unwrap_or("Unknown".to_owned())
         );
-        self.communicator.receive_downlink(timeout).await
+        let r = self.communicator.receive_downlink(timeout).await?;
+        println!(
+            "[{:?}] Device {} Ended waiting! Received {} packets: {}",
+            SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(),
+            self.id.map(|v| PrettyHexSlice(&*v).to_string())
+                .unwrap_or("Unknown".to_owned()), r.values().map(|v| {
+                    PrettyHexSlice(&v.payload).to_string()
+                }).collect::<Vec<_>>().join(","),
+            r.len()
+        );
+        Ok(r)
     }
 }

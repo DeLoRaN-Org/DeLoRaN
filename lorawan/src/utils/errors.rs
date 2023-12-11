@@ -18,6 +18,7 @@ pub enum LoRaWANError {
     MalformedMACCommand,
     
     InvalidMic,
+    InvalidNonce,
     InvalidBufferLength,
     InvalidBufferContent,
     MissingDownlink,
@@ -25,14 +26,14 @@ pub enum LoRaWANError {
 
 impl From<ErrorStack> for LoRaWANError {
     fn from(e: ErrorStack) -> Self {
-        eprintln!("{e}");
+        //eprintln!("{e}");
         LoRaWANError::OpenSSLErrorStack(e)
     }
 }
 
 impl From<TryFromSliceError> for LoRaWANError {
-    fn from(e: TryFromSliceError) -> Self {
-        eprintln!("{e}");
+    fn from(_e: TryFromSliceError) -> Self {
+        //eprintln!("{e}");
         LoRaWANError::InvalidBufferLength
     }
 }

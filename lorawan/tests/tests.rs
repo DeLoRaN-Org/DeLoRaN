@@ -175,7 +175,7 @@ mod tests {
         let join_accept = LoRaWANPacket::from_bytes(&packet, Some(&device), false).unwrap();
 
         if let Payload::JoinAccept(ja) = join_accept.payload() {
-            if let Err(e) = device.derive_session_context(ja) {
+            if let Err(e) = device.generate_session_context(ja) {
                 match e {
                     LoRaWANError::SessionContextMissing => panic!("Missing JoinRequest context"),
                     LoRaWANError::OpenSSLErrorStack(e) => panic!("{}", e),
@@ -302,7 +302,7 @@ mod tests {
         let packet = LoRaWANPacket::new(mhdr, Payload::JoinAccept(join_accept));
 
         if let Payload::JoinAccept(ja_payload) = packet.payload() {
-            device.derive_session_context(ja_payload).unwrap();
+            device.generate_session_context(ja_payload).unwrap();
         };
 
         println!("{device}");
@@ -717,7 +717,7 @@ mod tests {
         match packet.payload() {
             Payload::JoinRequest(_jr) => todo!(),
             Payload::JoinAccept(ja) => {
-                device.derive_session_context(ja).unwrap();
+                device.generate_session_context(ja).unwrap();
                 println!("{device}")
             },
             Payload::RejoinRequest(_rj) => todo!(),

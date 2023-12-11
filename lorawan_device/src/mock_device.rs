@@ -37,7 +37,6 @@ impl LoRaWANCommunicator for MockCommunicator {
         _src: Option<EUI64>,
         _dest: Option<EUI64>,
     ) -> Result<(), CommunicatorError> {
-        //println!("{}", PrettyHexSlice(bytes));
         Ok(())
     }
     
@@ -46,7 +45,7 @@ impl LoRaWANCommunicator for MockCommunicator {
         _timeout: Option<Duration>,
     ) -> Result<HashMap<SpreadingFactor, LoRaPacket>, CommunicatorError> {
         Ok(HashMap::from([(SpreadingFactor::new(7), LoRaPacket {
-            payload: Vec::from([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]),
+            payload: Vec::from([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18]),
             ..Default::default()
         })]))
     }  

@@ -2,11 +2,12 @@
 mod chirpstack;
 mod compiled;
 
-use std::{time::{Duration, SystemTime}, fs::{self, File}, net::Ipv4Addr, path::Path, process::Command as SyncCommand, str::FromStr};
+use std::{time::{Duration, SystemTime}, fs::{self, File}, net::Ipv4Addr, path::Path, process::Command as SyncCommand, str::FromStr, io::BufReader};
 use blockchain_api::{BlockchainClient, exec_bridge::BlockchainExeClient};
 use chirpstack::main_chirpstack;
-use lorawan_device::{tcp_device::TcpDevice, configs::TcpDeviceConfig};
+use lorawan_device::{tcp_device::TcpDevice, configs::{TcpDeviceConfig, DeviceConfig}};
 use lorawan::{utils::{eui::EUI64, PrettyHexSlice}, device::{Device, DeviceClass, LoRaWANVersion}, regional_parameters::region::{Region, RegionalParameters}, encryption::key::Key};
+use serde::Deserialize;
 use tokio::{net::TcpStream, time::Instant, process::Command, sync::mpsc};
 use std::io::Write;
 
@@ -17,7 +18,7 @@ const FIXED_PACKET_DELAY: u64 = 60;
 const RANDOM_PACKET_DELAY: u64 = 30;
 const CONFIRMED_AVERAGE_SEND: u8 = 10;
 const DEVICES_TO_SKIP: usize = 0;
-const JUST_CREATE_DEVICE: bool = false;
+const JUST_CREATE_DEVICE: bool = true;
 
 #[derive(Debug)]
 enum Stats {
@@ -66,23 +67,21 @@ async fn stats_holder(mut receiver: mpsc::Receiver<Msg>) {
     println!("Channel closed, quitting stats_holder");
 }
 
+
+#[derive(Deserialize)]
+struct DevicesFile {
+    devices: Vec<DeviceConfig>
+}
+
 async fn create_all_devices() {
-    let file_content = fs::read_to_string("./devices_augmented.csv").unwrap();
+    let content: DevicesFile = serde_json::from_reader(BufReader::new(File::open("./devices.json").unwrap())).unwrap();//fs::read_to_string("./devices.json").unwrap();
     let client = BlockchainExeClient::new("orderer1.orderers.dlwan.phd:6050", "lorawan", "lorawan", None);
     let mut join_handlers = Vec::new();
 
-
-    file_content.split('\n').skip(DEVICES_TO_SKIP).take(NUM_DEVICES).for_each(|line| {
-        let splitted = line.split(',').collect::<Vec<&str>>();
-        let dev_eui = splitted[0];
-        let join_eui = splitted[1];
-        let key = splitted[2];
-
-        //println!("{}", dev_eui);
-        let d = Device::new(DeviceClass::A, Some(RegionalParameters::new(Region::EU863_870)), EUI64::from_hex(dev_eui).unwrap(), EUI64::from_hex(join_eui).unwrap(), Key::from_hex(key).unwrap(), Key::from_hex(key).unwrap(), LoRaWANVersion::V1_0_4);
+    for d in content.devices.iter().map(|e| e.configuration) {
         let cloned = client.clone();
         std::thread::sleep(Duration::from_millis(50));
-        let handle =  tokio::spawn(async move {
+        join_handlers.push(tokio::spawn(async move {
             match cloned.get_device(d.dev_eui()).await {
                 Ok(d) => println!("Device already exists"),
                 Err(e) => {
@@ -92,9 +91,8 @@ async fn create_all_devices() {
                     }
                 },
             }
-        });
-        join_handlers.push(handle);
-    });
+        }));
+    }
 
     for handle in join_handlers {
         handle.await.unwrap();
@@ -224,12 +222,12 @@ async fn blockchain_main() {
             tokio::time::sleep(Duration::from_secs(sleep_time)).await;
 
             let d = Device::new(DeviceClass::A, Some(RegionalParameters::new(Region::EU863_870)), dev_eui, join_eui, key, key, LoRaWANVersion::V1_0_4);
-            println!("before creating");
+            //println!("before creating");
             let mut device = TcpDevice::create(d, &TcpDeviceConfig {
                 addr: nc_ip,
                 port: 9090,
             }).await;
-            println!("after creating");
+            //println!("after creating");
 
             if let Some(_s) = device.session() {
                 println!("Device already initialized:");
@@ -242,10 +240,10 @@ async fn blockchain_main() {
                 //let duration = 10;
                 //sleep(Duration::from_secs(duration)).await;
                 //device.set_dev_nonce(10);
-                while let Err(e) = device.send_join_request().await {
+                if let Err(e) = device.send_join_request().await {
                     panic!("Error joining: {e:?}");
                 };
-                println!("{}", *device);
+                //println!("{}", *device);
             }
 
             if device.session().is_some() {

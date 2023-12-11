@@ -1,7 +1,6 @@
-use std::{ops::{Deref, DerefMut}, cmp::Ordering, time::{Instant, SystemTime, Duration}, io::Write};
+use std::{ops::{Deref, DerefMut}, cmp::Ordering, time::Duration};
 use std::fmt::Debug;
-use lorawan::{device::Device, utils::{traits::ToBytes, errors::LoRaWANError, PrettyHexSlice}, lorawan_packet::{LoRaWANPacket, payload::Payload, mac_commands::{EDMacCommands, NCMacCommands}}};
-use std::fs::OpenOptions;
+use lorawan::{device::Device, utils::{traits::ToBytes, errors::LoRaWANError}, lorawan_packet::{LoRaWANPacket, payload::Payload, mac_commands::{EDMacCommands, NCMacCommands}}};
 use crate::communicator::{LoRaWANCommunicator, CommunicatorError};
 
 pub struct LoRaWANDevice<T> 
@@ -47,16 +46,16 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
         if confirmed {
 
             //TODO REMOVE PERFORMANCES CHECKS
-            let before = Instant::now();
-            let payloads = self.communication.receive_downlink(Some(Duration::from_secs(15))).await.unwrap();
-            let after = Instant::now();
+            //let before = Instant::now();
+            let payloads = self.communication.receive_downlink(Some(Duration::from_secs(5))).await.unwrap();
+            //let after = Instant::now();
             
-            let mut file = OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(format!("/root/times_{}.csv", self.dev_eui()))
-            .expect("Failed to open file");
-            writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
+            //let mut file = OpenOptions::new()
+            //.append(true)
+            //.create(true)
+            //.open(format!("/root/times_{}.csv", self.dev_eui()))
+            //.expect("Failed to open file");
+            //writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
             
             //TODO ESTRARRE MEGLIO I PAYLOAD - sf based?
             let (_sf, content) = payloads.iter().next().ok_or(LoRaWANError::MissingDownlink)?;
@@ -100,18 +99,18 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
 
     pub async fn send_join_request(&mut self) -> Result<(), CommunicatorError> {
         let join_request = self.device.create_join_request()?;
-        println!("{}", PrettyHexSlice(&join_request));
+        //println!("{}", PrettyHexSlice(&join_request));
         
         
         self.communication.send_uplink(&join_request, Some(*self.dev_eui()), None).await?;
-        let payloads = self.communication.receive_downlink(Some(Duration::from_secs(15))).await?;
+        let payloads = self.communication.receive_downlink(Some(Duration::from_secs(5))).await?;
         
         //TODO ESTRARRE MEGLIO I PAYLOAD
         let content = payloads.values().next().ok_or(LoRaWANError::MissingDownlink)?;
-        println!("{}", PrettyHexSlice(&content.payload));
+        //println!("{}", PrettyHexSlice(&content.payload));
 
         let packet = LoRaWANPacket::from_bytes(&content.payload, Some(&self.device), false)?;
-        println!("{packet:?}");
+        //println!("{packet:?}");
         
         if let Payload::JoinAccept(ja) = packet.payload() {
             //println!("join accept received: {ja:?}");
@@ -123,10 +122,13 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
             let cjn_u32 = u32::from_le_bytes([current_join_nonce[0], current_join_nonce[1], current_join_nonce[2], 0]);
 
             //println!("{jn_u32}-{cjn_u32}");
-            if cjn_u32 > jn_u32 { panic!("Invalid join_nonce, expected > {cjn_u32}, received {jn_u32}") }
+            if cjn_u32 > jn_u32 { 
+                eprintln!("Invalid join_nonce, expected > {cjn_u32}, received {jn_u32}"); 
+                return Err(CommunicatorError::LoRaWANError(LoRaWANError::InvalidNonce)) 
+            }
             else { 
                 self.device.join_context_mut().update_join_nonce(jn_u32);
-                self.device.derive_session_context(ja)?;
+                self.device.generate_session_context(ja)?;
             }
             //println!("{}",self.device);
         }

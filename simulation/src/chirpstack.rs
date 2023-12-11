@@ -273,7 +273,7 @@ async fn device_routine<T: LoRaWANCommunicator + Send + Sync>(mut fd: LoRaWANDev
 
                             let decryped = LoRaWANPacket::from_bytes(payload, Some(&*fd), false).unwrap().into_payload();
                             if let Payload::JoinAccept(ja) = decryped {
-                                fd.derive_session_context(&ja).unwrap();
+                                fd.generate_session_context(&ja).unwrap();
         
                                 let payload: Vec<u8> = format!("### confirmed {i} message  ###").into();
                                 let uplink = fd.create_uplink(Some(&payload), true, Some(1), None).unwrap(); 
@@ -286,8 +286,6 @@ async fn device_routine<T: LoRaWANCommunicator + Send + Sync>(mut fd: LoRaWANDev
                                 client.publish(paho_mqtt::Message::new(up_topic, &*uplink, paho_mqtt::QOS_1)).unwrap();
                                 counter_uplink += 1;
                                 //println!("published uplink: {}", PrettyHexSlice(&uplink));
-                            } else {
-                                panic!()
                             }
                         },
                     }
@@ -313,8 +311,6 @@ async fn device_routine<T: LoRaWANCommunicator + Send + Sync>(mut fd: LoRaWANDev
                                 client.publish(paho_mqtt::Message::new(up_topic, &*uplink, paho_mqtt::QOS_1)).unwrap();
                                 counter_uplink += 1;
                                 //println!("published uplink: {}", PrettyHexSlice(&uplink_vec));
-                            } else {
-                                panic!()
                             }
                         },
                     }
@@ -340,8 +336,6 @@ async fn device_routine<T: LoRaWANCommunicator + Send + Sync>(mut fd: LoRaWANDev
                                 client.publish(paho_mqtt::Message::new(up_topic, &*uplink, paho_mqtt::QOS_1)).unwrap();
                                 counter_uplink += 1;
                                 //println!("published uplink: {}", PrettyHexSlice(&uplink));
-                            }  else {
-                                panic!()
                             }
                         },
                     }

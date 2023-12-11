@@ -1,6 +1,7 @@
 pub mod exec_bridge;
 pub mod tcp_bridge;
 pub mod mock_bridge;
+pub mod convergence;
 
 
 use std::fmt::Display;
@@ -200,4 +201,25 @@ pub trait BlockchainClient: Send + Sync {
     async fn get_public_blockchain_state(&self) -> Result<BlockchainState, BlockchainError>;
     async fn get_device_org(&self, dev_id: &[u8]) -> Result<String, BlockchainError>;
     async fn get_org_anchor_address(&self, org: &str) -> Result<(IpAddr, u16), BlockchainError>;
+}
+
+
+//TODO implement sync versions where possible
+pub trait BlockchainClientSync: Send + Sync {
+    type Config: Send + Sync + Clone;
+
+    fn from_config(config: &Self::Config) -> Result<Box<Self>, BlockchainError>;
+    fn get_hash(&self) -> Result<String, BlockchainError>;
+    fn get_device_session(&self,    dev_addr: &[u8; 4]) -> Result<BlockchainDeviceSession, BlockchainError>;
+    fn get_device_config(&self, dev_eui: &EUI64,) -> Result<BlockchainDeviceConfig, BlockchainError>;
+    fn get_device(&self, dev_eui: &EUI64) -> Result<Device, BlockchainError>;
+    fn get_all_devices(&self) -> Result<BlockchainState, BlockchainError>;
+    fn create_device_config(&self, device: &Device) -> Result<(), BlockchainError>;
+    fn delete_device(&self, dev_eui: &EUI64) -> Result<(), BlockchainError>;
+    fn delete_device_session(&self, dev_addr: &[u8; 4]) -> Result<(), BlockchainError>;
+    fn create_uplink(&self, packet: &[u8], answer: Option<&[u8]>, n_id: &str) -> Result<(),BlockchainError>;
+    fn get_packet(&self, hash: &str) -> Result<BlockchainPacket,BlockchainError>;
+    fn get_public_blockchain_state(&self) -> Result<BlockchainState, BlockchainError>;
+    fn get_device_org(&self, dev_id: &[u8]) -> Result<String, BlockchainError>;
+    fn get_org_anchor_address(&self, org: &str) -> Result<(IpAddr, u16), BlockchainError>;
 }

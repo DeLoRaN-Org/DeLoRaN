@@ -10,6 +10,9 @@ import sys
 import threading
 import os
 import queue
+import datetime
+import random
+from collections import deque
 
 from time import sleep
 
@@ -282,7 +285,7 @@ def rx(sample_rate, sf_list, bandwidth, receiving, packet_queue, complex_data_nu
     data_size = 8  # bytes
 
     #NUMBER OF COMPLEX SAMPLES IN A DATA CHUNK
-    #complex_data_number = 500000
+    complex_data_number = 300000
 
     #SLIDING WINDOW CURSOR FOR THE RECEIVER BUFFER
     cursor = 0
@@ -327,18 +330,17 @@ def rx(sample_rate, sf_list, bandwidth, receiving, packet_queue, complex_data_nu
                                                                         queue_arr[index], packet_queue[index], sf, bandwidth,
                                                                         sample_rate, SF_sample_th[index]))
         processes_arr[index].start()
-        while (not (processes_arr[index].is_alive())):
-            time.sleep(0.1)
+        time.sleep(0.1)
+        #while (not (processes_arr[index].is_alive())):
 
-    for index, sf in enumerate(sf_arr):
-        while (not (processes_arr[index].is_alive())):
-            processes_arr[index] = mp.Process(name="Decoder SF" + str(sf), target=decoder_process,
-                                              args=(shm.name, complex_data_number, BUF_SIZE,
-                                                    queue_arr[index], packet_queue[index], sf, bandwidth,
-                                                    sample_rate, SF_sample_th[index]))
-
-            processes_arr[index].start()
-            time.sleep(1)
+    #for index, sf in enumerate(sf_arr):
+    #    while (not (processes_arr[index].is_alive())):
+    #        processes_arr[index] = mp.Process(name="Decoder SF" + str(sf), target=decoder_process,
+    #                                          args=(shm.name, complex_data_number, BUF_SIZE,
+    #                                                queue_arr[index], packet_queue[index], sf, bandwidth,
+    #                                                sample_rate, SF_sample_th[index]))
+    #        processes_arr[index].start()
+    #        time.sleep(1)
 
     #CREATION OF THE THRESHOLD TRIGGER PROCESS
     trigger_process = mp.Process(target=threshold_trigger_process, args=(index_queue, SF_sample_th, tuple(queue_arr)))
@@ -365,11 +367,20 @@ def rx(sample_rate, sf_list, bandwidth, receiving, packet_queue, complex_data_nu
         try:
 
             pause_rec.wait()
+
+
+
+            before = datetime.datetime.now()
+            #print("before")
             streamer.recv(recv_buffer, metadata)
+            #print("after")
+            after = datetime.datetime.now()
+
+            #print("Time elapsed", after - before) #if PRINT_DEBUG else None
+            #print(bcolors.OKGREEN + "DEBUG metadata ", metadata, bcolors.ENDC) #if PRINT_DEBUG else None
+            
             #streamer.recv(recv_buffer, metadata, timeout = 10)
             #streamer.recv(samples_buffer[cursor:cursor + complex_data_number], metadata)
-            
-            print(bcolors.OKGREEN + "DEBUG metadata ", metadata, bcolors.ENDC) if PRINT_DEBUG else None
 
             samples_buffer[cursor:cursor + buf_length] = recv_buffer
             cursor = (cursor + buf_length) % buffer_size
@@ -437,6 +448,7 @@ class lora_transceiver():
         st_args = uhd.usrp.StreamArgs("fc32", "sc16")
         st_args.channels = [self.rx_channel]
         self.rx_streamer = self.usrp.get_rx_stream(st_args)
+        
         self.rx_pause_flag = mp.Event()
         self.rx_pause_flag.set()
         #
@@ -1045,7 +1057,6 @@ def lora_packet_rx(s,SF,BW,OSF,Trise,p_ofs_est,Cfo_est):
         MAC_CRC_OK = False
         k_payload_est = None
         MSG = None
-
         return k_hdr_est,HDR_FCS_OK,k_payload_est,MAC_CRC_OK,MSG,DST,SRC,SEQNO,CR,HAS_CRC,truncated,ofs
     else:
         n_bits_hdr = (PAYLOAD_bits_hdr.size)
@@ -1382,9 +1393,13 @@ def samples_decoding(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
             # print("FCS Check", HDR_FCS_OK)
             # print("MAC CRC",MAC_CRC_OK)
             # print("PAYLOAD LENGTH", len(payload))
-            rssi = calculate_rssi(s[cumulative_index:])
-            snr = calculate_snr(s[cumulative_index:])
-            pack_array[received] = LoRaPacket(payload,SRC,DST,SEQNO,HDR_FCS_OK,HAS_CRC,MAC_CRC_OK,CR,0,SF,BW, rssi, snr)
+
+            print(f"CI:{cumulative_index}, LI: {last_index}, O: {offset}, S: {s.size}") if PRINT_DEBUG else None
+            
+            print(f"CI:{cumulative_index}, LI: {last_index}, O: {offset}, N: {N}, OSF: {OSF}, NRISe: {Nrise}, SF: {SF}, TRISE: {Trise}")
+            #rssi = calculate_rssi(s[cumulative_index:])
+            #snr = calculate_snr(s[cumulative_index:])
+            pack_array[received] = LoRaPacket(payload,SRC,DST,SEQNO,HDR_FCS_OK,HAS_CRC,MAC_CRC_OK,CR,0,SF,BW, 0, 0)
             received = received + 1
 
 
@@ -1635,20 +1650,18 @@ class LoRaPacket:
         self.snr = snr
 
     def __eq__(self, other):
-        payload_eq = np.all(self.payload == other.payload)
-        src_eq = (self.src == other.src)
-        dst_eq = (self.dst == other.dst)
-        seqn_eq = (self.seqn == other.seqn)
-        hdr_ok_eq  = (self.hdr_ok == other.hdr_ok)
-        has_crc_eq = (self.has_crc == other.has_crc)
-        crc_ok_eq = (self.crc_ok == other.crc_ok)
-        cr_eq = (self.cr == other.cr)
-        ih_eq = (self.ih == other.ih)
-        SF_eq = (self.SF == other.SF)
-        BW_eq = (self.BW == other.BW)
-
-        return payload_eq and src_eq and dst_eq and seqn_eq and hdr_ok_eq and has_crc_eq and crc_ok_eq and cr_eq and ih_eq and SF_eq and BW_eq
-
+        return np.all(self.payload == other.payload) and \
+                     (self.src == other.src) and \
+                     (self.dst == other.dst) and \
+                     (self.seqn == other.seqn) and \
+                     (self.hdr_ok == other.hdr_ok) and \
+                     (self.has_crc == other.has_crc) and \
+                     (self.crc_ok == other.crc_ok) and \
+                     (self.cr == other.cr) and \
+                     (self.ih == other.ih) and \
+                     (self.SF == other.SF) and \
+                     (self.BW == other.BW)
+        
     def __repr__(self):
         desc = "LoRa Packet Info:\n"
         sf_desc = "Spreading Factor: " + str(self.SF) + "\n"
@@ -1716,23 +1729,27 @@ def packet_receiver(pkt_queue: mp.Queue, packets, sf, filterID=None, tmt=None):
                 packets.put_nowait((sf,pkt))
                 return
 
-def buffered_packet_receiver(pkt_queue, packets_map, sf):
+def buffered_packet_receiver(pkt_queue, packets_map, sf, history_map, history_lock):
     print("Started receiver for sf", sf)
     while True:
         pkt = pkt_queue.get()
         if isinstance(pkt, LoRaPacket):
-            print(f"####### Received packet on sf {sf} {pkt.payload} #######")
+            #print(f"####### Received packet on sf {sf} {pkt.payload} #######")
             if str(pkt.dst) in packets_map[str(sf)]:
-                packets_map[str(sf)][str(pkt.dst)].put_nowait((sf,pkt))
-                print(f"Inserted in sf {sf} queue for {str(pkt.dst)}")
+                with history_lock:
+                    #if pkt.payload not in history_map[str(pkt.dst)]: 
+                    if not any(np.array_equal(pkt.payload, packet) for packet in history_map[str(pkt.dst)]):
+                        history_map[str(pkt.dst)].append(pkt.payload)
+                        packets_map[str(sf)][str(pkt.dst)].put_nowait((sf,pkt))
+                #print(f"Inserted in sf {sf} queue for {str(pkt.dst)}")
                 #packets_map[str(sf)][str(pkt.dst)] = mp.Queue(0)
-            else:
-                print(f"Received from {str(pkt.dst)} but not registered")
+            #else:
+            #    print(f"Received from {str(pkt.dst)} but not registered")
 
 def LoRaBufferedBuilder(address, rx_gain, tx_gain, bandwidth, rx_freq, tx_freq, sample_rate, rx_ch_ID, tx_ch_ID, spreading_factor):
     lora_radio = lora_transceiver(address, rx_gain, tx_gain, bandwidth, rx_freq, tx_freq, sample_rate,
                                             rx_ch_ID, tx_ch_ID)
-    rx_queues = lora_radio.rx_start([7])
+    rx_queues = lora_radio.rx_start([7], block_size=2400)
     tx_queue = lora_radio.tx_start(1)
     return (LoRaSender(lora_radio, tx_queue, spreading_factor, bandwidth), LoRaBufferedReceiver(lora_radio, rx_queues, [7]))
 
@@ -1742,6 +1759,17 @@ class LoRaSender:
         self.spreading_factor = spreading_factor
         self.tx_queue = tx_queue
         self.bandwidth = bandwidth
+
+    def change_radio_settings(self, spreading_factor, bandwidth):
+        #TODO implement these changes
+        self.usrp.set_rx_rate
+        self.usrp.set_rx_freq
+        self.usrp.set_rx_gain
+        self.usrp.set_rx_bandwidth
+        self.usrp.get_rx_stream
+        self.usrp.set_tx_rate
+        self.usrp.set_tx_freq
+        self.usrp.set_tx_gain
 
     def send_radio(self, data_array, src_id, dest_id):
         CR = 1
@@ -1753,38 +1781,58 @@ class LoRaSender:
         self.tx_queue.put_nowait(pack)
         return
 
+
+MAXLEN_DEQUE = 5
+
 class LoRaBufferedReceiver:
     def __init__(self, radio, rx_queues, sf_list):
         self.lora_radio = radio
         self.rx_queues = rx_queues
         self.sf_list = sf_list
-        self.packets_map = {}
+        self.packets_map = {}  # {sf: {d_id: queue}} -> queue is used to store messages received from a device and share it between threads
+        self.history_map = {}  # {d_id: [packets]} -> used to store the last received packets for each device
+        self.history_lock = threading.Lock() # to access history_map
 
+        self.history_map["0"] = deque(maxlen=MAXLEN_DEQUE)
         for i in range(len(sf_list)):
             self.packets_map[str(sf_list[i])] = {}
             self.packets_map[str(self.sf_list[i])]["0"] = mp.Queue(0) #0 is the d_id reserved for network servers and used as destination by devices, like a broadcast address
 
-            child = threading.Thread(target=buffered_packet_receiver, args=(self.rx_queues[i], self.packets_map, sf_list[i]))
+            child = threading.Thread(target=buffered_packet_receiver, args=(self.rx_queues[i], self.packets_map, sf_list[i], self.history_map, self.history_lock))
             child.start()
-        print("After creating packet_receiver")
+
+    def change_radio_settings(self, spreading_factor, bandwidth):
+        #TODO implement these changes
+        self.usrp.set_rx_rate
+        self.usrp.set_rx_freq
+        self.usrp.set_rx_gain
+        self.usrp.set_rx_bandwidth
+        self.usrp.get_rx_stream
+        self.usrp.set_tx_rate
+        self.usrp.set_tx_freq
+        self.usrp.set_tx_gain
 
     def register_device_id(self, d_id):
         for sf in self.sf_list:
             self.packets_map[str(sf)][str(d_id)] = mp.Queue(0)
+        self.history_map[str(d_id)] = deque(maxlen=MAXLEN_DEQUE)
 
     @staticmethod
-    def recv_handler(q,tmt, output_queue, d_id):
+    def recv_handler(q,tmt, outlist, d_id, mutex):
+        #print(f"tmt {tmt}")
         try:
             p = q.get(timeout=tmt)
-            print(f"Recv handler {d_id}, received packet")
-            output_queue.put(p)
-            print(f"Recv handler {d_id}, inserted into output_queue")
+            #print(f"Recv handler {d_id}, received packet")
+            with mutex:
+                outlist.append(p)
+            #print(f"Recv handler {d_id}, inserted into output_queue")
         except queue.Empty:
-            print(f"Recv handler {d_id}, received nothing")
+            #print(f"Recv handler {d_id}, received nothing")
             pass
 
     def recv_radio(self, sf_recv_list, d_id, tmt=None):
-        packets = mp.Queue(0)
+        packets = []
+        mutex = threading.Lock()
         handlers = []
         #for sf in sf_recv_list:
         #    if str(sf) not in self.packets_map:
@@ -1795,18 +1843,16 @@ class LoRaBufferedReceiver:
         for sf in sf_recv_list:
             if str(d_id) in self.packets_map[str(sf)]:
                 q = self.packets_map[str(sf)][str(d_id)]
-                c = threading.Thread(target=self.recv_handler, args=(q, tmt, packets, d_id))
+                c = threading.Thread(target=self.recv_handler, args=(q, tmt, packets, d_id, mutex))
                 c.start()
                 handlers.append(c)
 
         for h in handlers:
             h.join()
 
-        r = []
-        print(f"Main receiver thread {d_id}, total packets {packets.qsize()}")
-        while not packets.empty():
-           r.append(packets.get_nowait())
-        return r
+        #sleep(1) #TODO remove this sleep ODIO PYTHON
+        #print(f"Main receiver thread {d_id}, total packets {packets.qsize()}")
+        return packets
 
 def receiver_routine():
     address = "192.168.40.2"
@@ -1824,18 +1870,32 @@ def receiver_routine():
     sf = 7
     
     dev_id = 30000
+
+    counter = 0
     #dest_id = 20000
 
     (_, receiver) = LoRaBufferedBuilder(address, rx_gain, tx_gain, bandwidth, rx_freq, tx_freq, sample_rate, rx_ch_ID, tx_ch_ID, sf)
     receiver.register_device_id(dev_id)
     while True:
         packets = receiver.recv_radio([7], dev_id)
-        print("packets", packets)
         try:
-            for pack in packets:
-                print(pack)
+            for (sf, pack) in packets:
+                counter += 1
+                print(f"[{int(datetime.datetime.now().timestamp())}] Received {counter} packet {pack.payload} from {pack.src} to {pack.dst}")
         except queue.Empty:
             print("No packet received")
+
+
+
+def t_routine(sender, dev_id, dest_id, mutex):
+    dev_id = random.randint(0, 65535)
+    for i in range(0,400):
+        content = [(dev_id >> 8 & 0b11111111), (dev_id & 0b11111111), i]
+        print(f"[{int(datetime.datetime.now().timestamp())}] TRANSMITTING PACKET {content} from {dev_id} to {dest_id}")
+        with mutex:
+            sender.send_radio(content, dev_id, dest_id)
+        sleep(10)
+
 
 def transmitter_routine():
     address = "192.168.40.2"
@@ -1856,12 +1916,24 @@ def transmitter_routine():
     dest_id = 30000
 
     (sender, _) = LoRaBufferedBuilder(address, rx_gain, tx_gain, bandwidth, rx_freq, tx_freq, sample_rate, rx_ch_ID, tx_ch_ID, sf)
-    
+
+    handlers = []
+    mutex = threading.Lock()
+
+
     for i in range(0,10):
-        content = [i, i, i, i, i]
-        print(f"TRANSMITTING PACKET {content} from {dev_id} to {dest_id}")
-        sender.send_radio([i, i, i, i, i], dev_id, dest_id)
-        sleep(10)
+        h = mp.Process(target=t_routine, args=(sender, dev_id, dest_id, mutex))
+        h.start()
+        handlers.append(h)
+
+    #for i in range(0,10):
+    #    content = [i, i, i, i, i]
+    #    print(f"[{datetime.datetime.now().timestamp()}] TRANSMITTING PACKET {content} from {dev_id} to {dest_id}")
+    #    sender.send_radio([i, i, i, i, i], dev_id, dest_id)
+    #    sleep(10)
+
+    for h in handlers:
+        h.join()
 
 def main():
     if sys.argv[1] == 'tx':

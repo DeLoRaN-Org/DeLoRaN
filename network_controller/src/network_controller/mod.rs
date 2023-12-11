@@ -1,25 +1,17 @@
-mod utils;
-
 use std::{net::{Ipv4Addr, SocketAddr, IpAddr}, sync::Arc};
 
-use blockchain_api::{exec_bridge::BlockchainExeClient, BlockchainError, BlockchainClient};
+use blockchain_api::{BlockchainError, BlockchainClient};
 use lorawan::{utils::{increment_nonce, nonce_valid, PrettyHexSlice, traits::ToBytesWithContext, errors::LoRaWANError, eui::EUI64}, device::Device, lorawan_packet::{LoRaWANPacket, join::{JoinAcceptPayload, JoinRequestType}, payload::Payload, mhdr::{MHDR, MType, Major}, mac_payload::MACPayload, fhdr::FHDR, fctrl::{FCtrl, DownlinkFCtrl}, mac_commands}, physical_parameters::SpreadingFactor};
-use lorawan_device::communicator::LoRaWANCommunicator;
+use lorawan_device::{communicator::LoRaWANCommunicator, debug_device::DebugCommunicator};
+use openssl::sha::sha256;
 use serde::{Serialize, Deserialize};
 
 use tokio::{net::{TcpListener, TcpStream}, io::{AsyncReadExt, AsyncWriteExt}, task::JoinHandle};
-use tokio::sync::mpsc::{Receiver as MpscReceiver, Sender as MpscSender};
-use crate::{utils::error::NCError, network_controller::utils::{NCTaskResponse, NCTaskCommand}};
-
-use self::utils::CommandWrapper;
+use crate::utils::error::NCError;
 
 #[derive(Clone)]
 pub struct NetworkController {
     pub n_id: &'static str,
-    mpsc_tx: MpscSender<CommandWrapper>,
-    //tcp_config:   Option<&'static NetworkControllerTCPConfig>,
-    //radio_config: Option<&'static RadioDeviceConfig>,
-    //colosseum_config: Option<&'static ColosseumDeviceConfig>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -30,19 +22,12 @@ pub struct NetworkControllerTCPConfig {
 
 impl NetworkController {
     pub fn new(n_id: &'static str) -> Self {
-        let (mpsc_tx, mpsc_rx) = tokio::sync::mpsc::channel::<CommandWrapper>(128);
-
-        tokio::spawn(async move {
-            Self::handle_commands_task(mpsc_rx).await
-        });
-
         Self {
             n_id,
-            mpsc_tx
         }
     }
 
-    async fn handle_join_request(join_request: &[u8], bc_client: Arc<impl BlockchainClient>) -> Result<(Vec<u8>, EUI64), NCError> {
+    async fn handle_join_request(join_request: &[u8], bc_client: &Arc<impl BlockchainClient>) -> Result<(Vec<u8>, EUI64), NCError> {
         let packet = LoRaWANPacket::from_bytes(join_request, None, true)?;
         if let Payload::JoinRequest(jr_p) = packet.payload() {
             match bc_client.get_device_config(jr_p.dev_eui()).await  {
@@ -58,13 +43,19 @@ impl NetworkController {
                     else {
                         LoRaWANPacket::validate_mic(join_request, &packet, &device)?;
                         
-                        let dev_addr = [0_u8; 4].map(|_| rand::random::<u8>()); 
+                        //let dev_addr = [0_u8; 4].map(|_| rand::random::<u8>()); 
                         let mut dl_settings = 0_u8;
                         let opt_neg_v1_1 = 0b10000000;
                         dl_settings |= 0b00010001; //TODO per ora rx1_dr_offset 1, rx2_data_rate 1, capire come farle bene poi
                         if device.version().is_1_1_or_greater() {
                             dl_settings |= opt_neg_v1_1
                         }
+
+                        let mut dev_addr = [0_u8; 4]; 
+                        let dev_addr_sha256 = sha256(&[device.dev_eui().as_slice(), device.join_eui().as_slice(), device.join_context().join_nonce().as_slice()].concat());
+                        dev_addr.copy_from_slice(&dev_addr_sha256[..4]);
+
+
                         let join_accept = JoinAcceptPayload::new(
                             JoinRequestType::JoinRequest, 
                             device.join_context_mut().join_nonce_autoinc(), 
@@ -76,11 +67,11 @@ impl NetworkController {
                         );
                         
                         device.set_dev_nonce(increment_nonce(jr_p.dev_nonce(), device.dev_nonce(), dev_nonce_looped));
-                        device.derive_session_context(&join_accept)?;
+                        device.generate_session_context(&join_accept)?;
                         device.set_last_join_request_received(JoinRequestType::JoinRequest);
 
                         let packet = LoRaWANPacket::new(MHDR::new(MType::JoinAccept, Major::R1), Payload::JoinAccept(join_accept));
-                        println!("{device}");
+                        //println!("{device}");
                         
                         let join_accept = packet.to_bytes_with_context(&device).map_err(NCError::from)?;
                         
@@ -98,7 +89,7 @@ impl NetworkController {
         } else { Err(NCError::InvalidJoinRequest("Not a join request".to_string())) }
     }
 
-    async fn handle_unconfirmed_data_up(data_up: &[u8], bc_client: Arc<impl BlockchainClient>) -> Result<Device, NCError> {
+    async fn handle_unconfirmed_data_up(data_up: &[u8], bc_client: &Arc<impl BlockchainClient>) -> Result<Device, NCError> {
         let packet = LoRaWANPacket::from_bytes(data_up, None, true)?;
         if let Payload::MACPayload(payload) = packet.into_payload() {
             let dev_addr = payload.fhdr().dev_addr();
@@ -116,8 +107,8 @@ impl NetworkController {
                 let device = session.into();
                 let p = LoRaWANPacket::from_bytes(data_up, Some(&device), true)?; 
 
-                if let Payload::MACPayload(mp) = p.payload() {
-                    println!("{:?}", String::from_utf8_lossy(mp.frm_payload().unwrap()));
+                if let Payload::MACPayload(_mp) = p.payload() {
+                    //println!("{:?}", String::from_utf8_lossy(mp.frm_payload().unwrap()));
                     if payload.is_application() {
                         //let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
                         //let data_to_send = json!({
@@ -137,7 +128,7 @@ impl NetworkController {
         } else { Err(NCError::InvalidUplink("Not a MACPayload payload".to_string())) }
     }
 
-    async fn handle_confirmed_data_up(data_up: &[u8], bc_client: Arc<impl BlockchainClient>) -> Result<(Vec<u8>, EUI64), NCError> {
+    async fn handle_confirmed_data_up(data_up: &[u8], bc_client: &Arc<impl BlockchainClient>) -> Result<(Vec<u8>, EUI64), NCError> {
         let mut device = Self::handle_unconfirmed_data_up(data_up, bc_client).await?;
         
         let dev_addr = *device.session().unwrap().network_context().dev_addr();
@@ -160,78 +151,42 @@ impl NetworkController {
         let data_down = packet.to_bytes_with_context(&device).map_err(NCError::from)?;
         Ok((data_down, *device.dev_eui()))
     }
-
-    async fn handle_commands_task(mut mpsc_rx: MpscReceiver<CommandWrapper>) {
-        let client = Arc::new(BlockchainExeClient::new("orderer1.orderers.dlwan.phd:6050", "lorawan", "lorawan", None)); 
-        while let Some(command) = mpsc_rx.recv().await {
-            
-            let c = Arc::clone(&client);
-            tokio::spawn(async move {
-                if (match command.0 {
-                    NCTaskCommand::JoinRequest { join_request } => {
-                        let response = Self::handle_join_request(&join_request, c).await;
-                        command.1.send(NCTaskResponse::JoinRequest { result: response })              
-                    },
-                    NCTaskCommand::UnConfirmedDataUp { data_up } => {
-                        let response = Self::handle_unconfirmed_data_up(&data_up, c).await;
-                        command.1.send(NCTaskResponse::UnConfirmedDataUp { result: response.map(|_| ()) })
-                    },
-                    NCTaskCommand::ConfirmedDataUp   { data_up } => {
-                        let response = Self::handle_confirmed_data_up(&data_up, c).await;
-                        command.1.send(NCTaskResponse::ConfirmedDataUp { result: response })
-                    },
-                }).is_err() { eprintln!("Error sending response back to task handler") }
-            }); //end task
-        }
-    }
     
-    async fn create_and_send_task(mhdr: &MHDR, buf: &[u8], mpsc_tx: &MpscSender<CommandWrapper>) -> Result<Option<(Vec<u8>, EUI64)>, NCError> {        
+    async fn dispatch_task(mhdr: &MHDR, buf: &[u8], bc_client: &Arc<impl BlockchainClient>) -> Result<Option<(Vec<u8>, EUI64)>, NCError> {
         match mhdr.mtype() {
             MType::JoinRequest => {
-                let cmd = NCTaskCommand::JoinRequest { join_request: buf.to_vec() };
-                if let Ok(NCTaskResponse::JoinRequest { result }) = utils::send_task(cmd, mpsc_tx).await {
-                    result.map(Some)
-                } else {
-                    eprintln!("Error while sending command to task");
-                    Err(NCError::CommandTransmissionFailed("should not happen".to_string()))
-                }
+                Ok(Some(Self::handle_join_request(buf, bc_client).await?))
             },
             MType::UnconfirmedDataUp => {
-
-                let cmd = NCTaskCommand::UnConfirmedDataUp { data_up: buf.to_vec() };
-                utils::send_task(cmd, mpsc_tx).await.map(|_v| None)
+                Self::handle_unconfirmed_data_up(buf, bc_client).await?;
+                Ok(None)
             },
             MType::ConfirmedDataUp => {
-      
-                let cmd = NCTaskCommand::ConfirmedDataUp { data_up: buf.to_vec() };
-                match utils::send_task(cmd, mpsc_tx).await {
-                    Ok(nctr) => {
-                        if let NCTaskResponse::ConfirmedDataUp { result } = nctr {
-                            result.map(Some)
-                        }
-                        else { Err(NCError::CommandTransmissionFailed("should not happen".to_string())) }
-                    },
-                    Err(e) => Err(e),
-                }
+                Ok(Some(Self::handle_confirmed_data_up(buf, bc_client).await?))
             },
             MType::RejoinRequest => {
                 unimplemented!("RejoinRequest")
             },
-            MType::UnconfirmedDataDown => todo!(),
-            MType::ConfirmedDataDown => todo!(),
             
-            MType::Proprietary => todo!(),
-            MType::JoinAccept => todo!(), //-> join accept ricevuta dal NC? da ignorare?
+            MType::UnconfirmedDataDown |
+            MType::ConfirmedDataDown |
+            MType::JoinAccept => {
+                eprintln!("received {mhdr:?}, ignoring");
+                Err(NCError::InvalidUplink("Received downlink".to_string()))
+            } //TODO -> ignore?
+            MType::Proprietary => {
+                unimplemented!("Proprietary")
+            }
         }
     }
 
-    async fn handle_tcp_connection(mut cl_sock: TcpStream, mpsc_tx: MpscSender<CommandWrapper>, n_id: &'static str,  bc_client: Arc<impl BlockchainClient>) {
+    async fn handle_tcp_connection(mut cl_sock: TcpStream, n_id: &'static str,  bc_client: Arc<impl BlockchainClient>) {
         let mut buf = vec![0_u8; 1024];
         while let Ok(bytes_read) = cl_sock.read(&mut buf).await {
-            println!("read {} bytes: {}", bytes_read, PrettyHexSlice(&buf[..bytes_read]));
+            //println!("read {} bytes: {}", bytes_read, PrettyHexSlice(&buf[..bytes_read]));
             if bytes_read == 0 {break}
             let mhdr: MHDR = MHDR::from_bytes(buf[0]);
-            let answer = Self::create_and_send_task(&mhdr, &buf[..bytes_read], &mpsc_tx).await;
+            let answer = Self::dispatch_task(&mhdr, &buf[..bytes_read], &bc_client).await;
             match answer {
                 Ok(ans) => {
                     if let Some((in_answer, _)) = &ans {
@@ -242,7 +197,7 @@ impl NetworkController {
                             println!("uplink created successfully");
                         }, 
                         Err(e) => {
-                            println!("Error creating uplink with answer: {e:?}")
+                            eprintln!("Error creating uplink with answer: {e:?}")
                         },
                     };
                 },
@@ -252,12 +207,12 @@ impl NetworkController {
         println!("task ended");
     }
 
-    async fn handle_connection<LC,BC>(mpsc_tx: MpscSender<CommandWrapper>, config: &'static LC::Config, n_id: &'static str, blockchain_config: &BC::Config) 
+    async fn communicator_routine<LC,BC>(config: &'static LC::Config, n_id: &'static str, blockchain_config: &BC::Config) 
     where LC: LoRaWANCommunicator + Sync + Send + 'static, 
           BC: BlockchainClient + 'static { //TODO TOO MANY 'STATIC PROBABLY WRONG BUT IT COMPILES LETS SEE HOW IT GOES
 
         let client: Arc<BC> = Arc::new(*BC::from_config(blockchain_config).await.unwrap());
-        let communicator = Arc::new(*LC::from_config(config).await.unwrap());
+        let communicator = Arc::new(DebugCommunicator::from(*LC::from_config(config).await.unwrap(), None));
         loop {
             match communicator.receive_downlink(None).await {
                 Ok(mut content) => {
@@ -267,12 +222,11 @@ impl NetworkController {
                         println!("Received {} at sf {}",PrettyHexSlice(&packet.payload), sf);
                         let mhdr = MHDR::from_bytes(packet.payload[0]);
 
-                        let mpsc_clone = mpsc_tx.clone();
                         let client_clone = Arc::clone(&client);
                         let radio_clone = Arc::clone(&communicator);
 
                         tokio::spawn(async move {
-                            let answer = Self::create_and_send_task(&mhdr, &packet.payload, &mpsc_clone).await;
+                            let answer = Self::dispatch_task(&mhdr, &packet.payload, &client_clone).await;
                             match answer {
                                 Ok(ans) => {
                                     if let Some((in_answer, dest)) = &ans {
@@ -283,17 +237,17 @@ impl NetworkController {
                                             println!("uplink created successfully");
                                         }, 
                                         Err(e) => {
-                                            println!("Error creating uplink with answer: {e:?}")
+                                            eprintln!("Error creating uplink with answer: {e:?}")
                                         },
                                     };
                                 },
-                                Err(e) => eprintln!("{e:?}"),
+                                Err(e) => eprintln!("Packet {}: {e:?}", PrettyHexSlice(&packet.payload)),
                             }
                         });
                     };
                 },
                 Err(e) => {
-                    println!("Error receiving downlink: {e:?}");
+                    eprintln!("Error receiving downlink: {e:?}");
                     break;
                 },
             }
@@ -302,7 +256,7 @@ impl NetworkController {
 
     pub fn tcp_routine<BC>(&self, config: &NetworkControllerTCPConfig, blockchain_config: &BC::Config) -> JoinHandle<()> where BC: BlockchainClient + 'static  {
         let n_id: &str = self.n_id;
-        let m = self.mpsc_tx.clone();
+        //let m = self.mpsc_tx.clone();
         let c = blockchain_config.clone();
         let tcp_dev_port = config.tcp_dev_port;
         
@@ -313,13 +267,13 @@ impl NetworkController {
             let client: Arc<BC> = Arc::new(*BC::from_config(&c).await.unwrap());
             let dev_addr: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), tcp_dev_port);
             let dev_socket = TcpListener::bind(dev_addr).await.unwrap();
-            println!("Waiting for connections...");
+            //println!("Waiting for connections...");
             while let Ok((cl_sock, _addr)) = dev_socket.accept().await {
-                println!("Received connection");
-                let mm = m.clone();
+                //println!("Received connection");
+                //let mm = m.clone();
                 let c = Arc::clone(&client);
                 tokio::spawn(async move {
-                    Self::handle_tcp_connection(cl_sock, mm, n_id, c).await
+                    Self::handle_tcp_connection(cl_sock, n_id, c).await
                 });
             };
         })
@@ -329,12 +283,11 @@ impl NetworkController {
     where LC: LoRaWANCommunicator + 'static, BC: BlockchainClient + 'static {
 
         let n_id = self.n_id;
-        let m = self.mpsc_tx.clone();
 
         tokio::spawn(async move {
             // Self::handle_colosseum_connection(mpsc_tx_clone, colosseum_config, n_id).await
-            //Self::handle_connection::<ColosseumCommunicator, BlockchainMockClient>(mpsc_tx_clone, colosseum_config, n_id, BlockchainMockClientConfig).await
-            Self::handle_connection::<LC, BC>(m, config, n_id, bc_config).await
+            //Self::communicator_routine::<ColosseumCommunicator, BlockchainMockClient>(mpsc_tx_clone, colosseum_config, n_id, BlockchainMockClientConfig).await
+            Self::communicator_routine::<LC, BC>(config, n_id, bc_config).await
         })
     }
 }
@@ -358,7 +311,7 @@ async fn handle_colosseum_connection(mpsc_tx: MpscSender<CommandWrapper>, coloss
                         let r = Arc::clone(&radio_communicator);
 
                         tokio::spawn(async move {
-                            let answer = Self::create_and_send_task(&mhdr, packet.payload.clone(), &m).await;
+                            let answer = Self::dispatch_task(&mhdr, packet.payload.clone(), &m).await;
                             match answer {
                                 Ok(ans) => {
                                     if let Some((in_answer, dest)) = &ans {
@@ -403,7 +356,7 @@ async fn handle_colosseum_connection(mpsc_tx: MpscSender<CommandWrapper>, coloss
                         let radio_clone = Arc::clone(&radio_communicator);
 
                         tokio::spawn(async move {
-                            let answer = Self::create_and_send_task(&mhdr, packet.payload.clone(), &mpsc_clone).await;
+                            let answer = Self::dispatch_task(&mhdr, packet.payload.clone(), &mpsc_clone).await;
                             match answer {
                                 Ok(ans) => {
                                     if let Some((in_answer, dest)) = &ans {

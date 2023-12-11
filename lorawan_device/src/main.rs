@@ -150,17 +150,19 @@ fn send_commands(nc_endpoints: &[&str], devices_per_device: usize) {
 
 #[tokio::main]
 async fn main() {
-    let nc_endpoint = ["wineslab-042", "wineslab-039"];
-    let devices_endpoint = ["wineslab-053", "wineslab-057"];
-    let devices_per_device = 300;
-    create_configs(0, devices_endpoint.len(), devices_per_device);
-    send_commands(&nc_endpoint, devices_per_device);
+    let nc_endpoint = ["wineslab-049"];
+    let devices_endpoint = ["wineslab-049"];
+    let devices_per_device = 25;
+    create_configs(0, 4, devices_per_device);
+    //send_commands(&nc_endpoint, devices_per_device);
 }
 
 
 #[cfg(test)]
 mod test {
-    use lorawan::{device::{Device, DeviceClass, LoRaWANVersion, session_context::{NetworkSessionContext, ApplicationSessionContext, SessionContext}}, utils::eui::EUI64, encryption::key::Key};
+    use core::panic;
+
+    use lorawan::{device::{Device, DeviceClass, LoRaWANVersion, session_context::{NetworkSessionContext, ApplicationSessionContext, SessionContext}}, utils::eui::EUI64, encryption::key::Key, lorawan_packet::LoRaWANPacket};
     use lorawan_device::{debug_device::DebugDevice, lorawan_device::LoRaWANDevice, mock_device::MockCommunicator};
 
     fn create_initialized_device() -> Device {
@@ -199,6 +201,19 @@ mod test {
     #[tokio::test]
     async fn test() {
         let mut ld = DebugDevice::from(LoRaWANDevice::new(create_initialized_device(), MockCommunicator));
-        ld.send_uplink(Some("###  confirmed 5 message  ###".as_bytes()), false, Some(1), None).await.unwrap();
+        
+        for _ in 0..1000 {
+            let uplink = ld.create_uplink(Some("###  confirmed 5 message  ###".as_bytes()), false, Some(1), None).unwrap();
+    
+            match LoRaWANPacket::from_bytes(&uplink, Some(&*ld), true) {
+                Ok(l) => {
+                    //println!("{:?}", l)
+                },
+                Err(e) => {
+                    println!("{:?}", e);
+                    panic!("help")
+                },
+            };
+        }
     }
 }

@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::fmt::Debug;
-use std::fs;
+use std::{fs, thread};
 use std::time::Duration;
 use async_trait::async_trait;
 use blockchain_api::BlockchainClient;
 use blockchain_api::exec_bridge::BlockchainExeClient;
 use lorawan::physical_parameters::SpreadingFactor;
-use lorawan::utils::PrettyHexSlice;
 use lorawan::{device::Device, utils::eui::EUI64};
 use pyo3::{PyAny, Python, Py};
 use pyo3::types::PyModule;
@@ -102,7 +101,7 @@ impl ColosseumCommunicator {
     pub async fn register_device(&mut self, d_id: EUI64) ->  Result<(), CommunicatorError> {
         let (send, recv) = oneshot::channel();
         let dev_id = extract_dev_id(Some(d_id));
-        println!("Registering device: {dev_id}");
+        //println!("Registering device: {dev_id}");
         let _ = self.receiver_send.send((ReceiverReq::RegisterDevice(dev_id), send)).await;
         match recv.await {
             Ok(r) => {
@@ -127,6 +126,11 @@ impl ColosseumCommunicator {
                 ))
             }
         }
+    }
+
+    pub async fn change_config(&mut self, config: &RadioDeviceConfig) -> Result<(), CommunicatorError> {
+        self.radio_config = *config;
+        todo!("Change config in the radio thread"); //TODO find a way to reflect changes of the radio config in the real radio in the radio thread
     }
 }
 
@@ -167,9 +171,9 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
                 .unwrap()
         });
 
-        tokio::spawn(async move {
-            while let Some(((data, src, dest), sender)) = sender_recv.recv().await {
-                println!("{}", PrettyHexSlice(&data));
+        thread::spawn(move || {
+            while let Some(((data, src, dest), sender)) = sender_recv.blocking_recv() {
+                //println!("{}", PrettyHexSlice(&data));
                 Python::with_gil(|py| {
                     match lora_sender.call_method(
                         py,
@@ -178,11 +182,10 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
                         None,
                     ) {
                         Ok(_) => {
-                            println!("Sent!");
                             let _ = sender.send(true);
                         }
                         Err(e) => {
-                            println!("{e}");
+                            eprintln!("{e}");
                             let _ = sender.send(false);
                         }
                     }
@@ -191,8 +194,8 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
             println!("Thread sender died");
         });
         
-        tokio::spawn(async move {
-            while let Some((req, sender)) = receiver_recv.recv().await {
+        thread::spawn(move || {
+            while let Some((req, sender)) = receiver_recv.blocking_recv() {
                 match req {
                     ReceiverReq::ReceiveDownlink((d_id, timeout)) => {
                         let sf_list = [radio_config.spreading_factor.value()];
@@ -203,11 +206,10 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
                             .extract(py)
                             {
                                 Ok(v) => {
-                                    println!("Received!");
                                     let _ = sender.send(ReceiverAns::ReceiveDownlink((true, v)));
                                 }
                                 Err(e) => {
-                                    println!("{e}");
+                                    eprintln!("{e}");
                                 }
                             };
                         });
@@ -264,7 +266,6 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
         &self,
         timeout: Option<Duration>,
     ) -> Result<HashMap<SpreadingFactor, LoRaPacket>, CommunicatorError> {
-        println!("Waiting for downlink!");
         let (send, recv) = oneshot::channel();
         let _ = self
             .receiver_send
@@ -275,7 +276,6 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
             Ok(res) => {
                 if let ReceiverAns::ReceiveDownlink((r, buffers)) = res {
                     if r {
-                        println!("Ended waiting! Received {} packets", buffers.len());
                         Ok(buffers
                             .into_iter()
                             .map(|(sf, p)| (SpreadingFactor::new(sf), p))

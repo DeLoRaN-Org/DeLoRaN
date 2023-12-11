@@ -50,14 +50,11 @@ pub enum LoRaWANVersion {
 
 impl LoRaWANVersion {
     pub fn is_1_1_or_greater(&self) -> bool {
-        match self {
-            LoRaWANVersion::V1_0 |
+        !matches!(self, LoRaWANVersion::V1_0 |
             LoRaWANVersion::V1_0_1 |
             LoRaWANVersion::V1_0_2 |
             LoRaWANVersion::V1_0_3 |
-            LoRaWANVersion::V1_0_4 => false,
-            LoRaWANVersion::V1_1 => true,
-        }
+            LoRaWANVersion::V1_0_4)
     }
 }
 
@@ -118,7 +115,7 @@ impl Device {
     }
     
 
-    pub fn derive_session_context(&mut self, join_accept_payload: &JoinAcceptPayload) -> Result<(), LoRaWANError> {
+    pub fn generate_session_context(&mut self, join_accept_payload: &JoinAcceptPayload) -> Result<(), LoRaWANError> {
         self.session = Some(SessionContext::derive(
             join_accept_payload.opt_neg(),
             &self.nwk_key,

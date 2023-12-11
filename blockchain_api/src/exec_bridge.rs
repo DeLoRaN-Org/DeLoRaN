@@ -119,8 +119,6 @@ impl BlockchainExeClient {
                 msg: last_stderr_line.clone(),
             }))?;
 
-            println!("{ans:?}");
-
             let mut key: Option<&str> = None;
             let mut value: Option<&str> = None;
             let status: u16;
@@ -146,7 +144,6 @@ impl BlockchainExeClient {
                         key = Some(t_key);
                         value = Some(&t_value[2..=len-2]);
                     } else {
-                        println!("{}", &t_value[2..=len-2]);
                         return serde_json::from_str::<BlockchainAns<T>>(&t_value[2..=len-2]).map_err(|e| e.to_string());       
                     }
                 }                
@@ -164,12 +161,54 @@ impl BlockchainExeClient {
             }
         }
         else {
-            let a = serde_json::from_str::<Value>(stdout.trim()).unwrap();
-            Ok(BlockchainAns {
-                content: serde_json::from_str::<T>(a.get("content").unwrap().as_str().unwrap()).ok(),
-            }) //FIXME non era cosi non so che succede, controllare il metodo di creazione dei device
+            serde_json::from_str::<BlockchainAns<T>>(stdout.trim()).or_else(|_| {
+                let a = serde_json::from_str::<Value>(stdout.trim()).unwrap();
+                Ok(BlockchainAns {
+                    content: serde_json::from_str::<T>(a.get("content").unwrap().as_str().unwrap()).ok(),
+                })
+            })
+            //FIXME non era cosi non so che succede, controllare il metodo di creazione dei device
             //serde_json::from_str::<BlockchainAns<T>>(stdout.trim()).map_err(|e| e.to_string()) 
         }
+    }
+}
+
+
+
+//TODO Remove, just for convergence times
+impl BlockchainExeClient {
+    pub async fn create_flag(&self) -> Result<(), BlockchainError> {
+        let args = BlockchainArgs {
+            Args: vec![
+                "CreateFlag".to_owned(),
+            ],
+        };
+
+        self.create_command::<()>(true,args, None).await.map_err(BlockchainError::GenericError)?;
+        Ok(())
+    }
+    
+    pub async fn clear_flag(&self) -> Result<(), BlockchainError> {
+        let args = BlockchainArgs {
+            Args: vec![
+                "ClearFlag".to_owned(),
+            ],
+        };
+
+        self.create_command::<()>(true,args, None).await.map_err(BlockchainError::GenericError)?;
+        Ok(())
+    }
+
+    pub async fn get_flag(&self) -> Result<String,BlockchainError> {
+        let args = BlockchainArgs {
+            Args: vec![
+                "ReadFlag".to_owned(),
+            ],
+        };
+
+        self.create_command(false,args, None).await
+        .map_err(BlockchainError::GenericError)?
+        .content.ok_or(BlockchainError::MissingContent)
     }
 }
 
@@ -319,7 +358,6 @@ impl crate::BlockchainClient for BlockchainExeClient {
 
         let ans = self.create_command(false,args, None).await.map_err(BlockchainError::GenericError)?;
         ans.content.ok_or(BlockchainError::MissingContent)
-
     }
 
     async fn get_public_blockchain_state(&self) -> Result<BlockchainState, BlockchainError> {

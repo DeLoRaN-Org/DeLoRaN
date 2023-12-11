@@ -89,7 +89,7 @@ async fn network_controller_main(config: &'static NetworkControllerConfig) {
     let t1 = config.colosseum_config.as_ref().map(|colosseum_config| nc.routine::<ColosseumCommunicator, BlockchainExeClient>(colosseum_config, &BC_CONFIG));
     let t2 = config.radio_config.as_ref().map(|radio_config| nc.routine::<RadioCommunicator, BlockchainExeClient>(radio_config, &BC_CONFIG));
     let t3 = config.tcp_config.as_ref().map(|tcp_config| nc.tcp_routine::<BlockchainExeClient>(tcp_config, &BC_CONFIG));
-    
+
     if let Some(t) = t1 { t.await.unwrap(); }
     if let Some(t) = t2 { t.await.unwrap(); }
     if let Some(t) = t3 { t.await.unwrap(); }
@@ -131,7 +131,7 @@ pub fn create_initialized_device() -> Device {
     device
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 20)]
 async fn main() -> Result<(), std::io::Error> {
     let _config = Config {
         devices: None,
@@ -186,19 +186,9 @@ async fn main() -> Result<(), std::io::Error> {
         }),
     };
 
-    //println!("{}", serde_json::to_string_pretty(&_config).unwrap());
-    //return Ok(());
 
     lazy_static! {
         static ref ARGS: Args  = Args::parse();
-        //static ref SNR_LORA_CODE: String = {
-        //    let mut buffer = String::new();
-        //    let _ = File::open(ARGS.pcode.as_ref().unwrap())
-        //        .unwrap()
-        //        .read_to_string(&mut buffer)
-        //        .unwrap();
-        //    buffer
-        //};
         static ref CONFIGS: (
             Option<Vec<DeviceConfig>>,
             Option<DeviceConfig>,
