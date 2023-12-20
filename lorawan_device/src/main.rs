@@ -120,6 +120,7 @@ struct Commands {
     command: String
 }
 
+#[allow(dead_code)]
 fn send_commands(nc_endpoints: &[&str], devices_per_device: usize) {
     let mut commands: Vec<Commands> = serde_json::from_str(&fs::read_to_string("./configs/create_commands.json").unwrap()).unwrap();
     
@@ -150,11 +151,14 @@ fn send_commands(nc_endpoints: &[&str], devices_per_device: usize) {
 
 #[tokio::main]
 async fn main() {
+    #[allow(unused)]
     let nc_endpoint = ["wineslab-049"];
+    #[allow(unused)]
     let devices_endpoint = ["wineslab-049"];
     let devices_per_device = 25;
-    create_configs(0, 4, devices_per_device);
+    create_configs(0, 5, devices_per_device);
     //send_commands(&nc_endpoint, devices_per_device);
+    Ok::<(), ()>(()).or(Err::<(), ()>(())).unwrap(); //last line is a hack to make the compiler happy
 }
 
 
@@ -163,7 +167,8 @@ mod test {
     use core::panic;
 
     use lorawan::{device::{Device, DeviceClass, LoRaWANVersion, session_context::{NetworkSessionContext, ApplicationSessionContext, SessionContext}}, utils::eui::EUI64, encryption::key::Key, lorawan_packet::LoRaWANPacket};
-    use lorawan_device::{debug_device::DebugDevice, lorawan_device::LoRaWANDevice, mock_device::MockCommunicator};
+    use  lorawan_device::{devices::lorawan_device::LoRaWANDevice, devices::mock_device::MockCommunicator, devices::debug_device::DebugDevice};
+
 
     fn create_initialized_device() -> Device {
         let mut device = Device::new(
@@ -206,7 +211,7 @@ mod test {
             let uplink = ld.create_uplink(Some("###  confirmed 5 message  ###".as_bytes()), false, Some(1), None).unwrap();
     
             match LoRaWANPacket::from_bytes(&uplink, Some(&*ld), true) {
-                Ok(l) => {
+                Ok(_) => {
                     //println!("{:?}", l)
                 },
                 Err(e) => {

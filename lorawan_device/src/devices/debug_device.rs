@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     communicator::{CommunicatorError, LoRaPacket, LoRaWANCommunicator},
-    lorawan_device::LoRaWANDevice,
+    devices::lorawan_device::LoRaWANDevice,
 };
 use async_trait::async_trait;
 use blockchain_api::{exec_bridge::BlockchainExeClient, BlockchainClient};

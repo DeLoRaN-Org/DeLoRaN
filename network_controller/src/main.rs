@@ -8,9 +8,9 @@ use lorawan::{
     regional_parameters::region::Region,
 };
 use lorawan_device::{
-    colosseum_device::ColosseumCommunicator,
+    devices::colosseum_device::ColosseumCommunicator,
     configs::{ColosseumDeviceConfig, RadioDeviceConfig},
-    radio_device::RadioCommunicator,
+    devices::radio_device::RadioCommunicator,
 };
 use network_controller::network_controller::{NetworkController, NetworkControllerTCPConfig};
 

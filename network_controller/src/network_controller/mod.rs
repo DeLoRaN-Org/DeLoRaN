@@ -1,8 +1,8 @@
 use std::{net::{Ipv4Addr, SocketAddr, IpAddr}, sync::Arc};
 
 use blockchain_api::{BlockchainError, BlockchainClient};
-use lorawan::{utils::{increment_nonce, nonce_valid, PrettyHexSlice, traits::ToBytesWithContext, errors::LoRaWANError, eui::EUI64}, device::Device, lorawan_packet::{LoRaWANPacket, join::{JoinAcceptPayload, JoinRequestType}, payload::Payload, mhdr::{MHDR, MType, Major}, mac_payload::MACPayload, fhdr::FHDR, fctrl::{FCtrl, DownlinkFCtrl}, mac_commands}, physical_parameters::SpreadingFactor};
-use lorawan_device::{communicator::LoRaWANCommunicator, debug_device::DebugCommunicator};
+use lorawan::{utils::{increment_nonce, nonce_valid, PrettyHexSlice, traits::ToBytesWithContext, errors::LoRaWANError, eui::EUI64}, device::Device, lorawan_packet::{LoRaWANPacket, join::{JoinAcceptPayload, JoinRequestType}, payload::Payload, mhdr::{MHDR, MType, Major}, mac_payload::MACPayload, fhdr::FHDR, fctrl::{FCtrl, DownlinkFCtrl}, mac_commands}};
+use lorawan_device::{communicator::LoRaWANCommunicator, devices::debug_device::DebugCommunicator};
 use openssl::sha::sha256;
 use serde::{Serialize, Deserialize};
 
@@ -52,7 +52,7 @@ impl NetworkController {
                         }
 
                         let mut dev_addr = [0_u8; 4]; 
-                        let dev_addr_sha256 = sha256(&[device.dev_eui().as_slice(), device.join_eui().as_slice(), device.join_context().join_nonce().as_slice()].concat());
+                        let dev_addr_sha256 = sha256(&[device.dev_eui().as_slice(), device.join_eui().as_slice(), &jr_p.dev_nonce().to_be_bytes()].concat());
                         dev_addr.copy_from_slice(&dev_addr_sha256[..4]);
 
 
@@ -209,15 +209,14 @@ impl NetworkController {
 
     async fn communicator_routine<LC,BC>(config: &'static LC::Config, n_id: &'static str, blockchain_config: &BC::Config) 
     where LC: LoRaWANCommunicator + Sync + Send + 'static, 
-          BC: BlockchainClient + 'static { //TODO TOO MANY 'STATIC PROBABLY WRONG BUT IT COMPILES LETS SEE HOW IT GOES
+          BC: BlockchainClient + 'static { //TODO too many statics? maybe not
 
         let client: Arc<BC> = Arc::new(*BC::from_config(blockchain_config).await.unwrap());
         let communicator = Arc::new(DebugCommunicator::from(*LC::from_config(config).await.unwrap(), None));
         loop {
             match communicator.receive_downlink(None).await {
                 Ok(mut content) => {
-                    let sf = SpreadingFactor::new(7);
-                    let packet = content.remove(&sf).unwrap(); //TODO analyze all packets instead of just one from sf 7
+                    let (sf, packet) = content.drain().next().unwrap(); //TODO analyze all packets instead of just one from sf 7
                     if !packet.payload.is_empty() {
                         println!("Received {} at sf {}",PrettyHexSlice(&packet.payload), sf);
                         let mhdr = MHDR::from_bytes(packet.payload[0]);

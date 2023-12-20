@@ -3,7 +3,7 @@
 use core::panic;
 use std::{collections::{HashMap, HashSet}, time::{Duration, Instant, SystemTime}, fs::File, path::Path, process::Command as SyncCommand};
 
-use lorawan_device::{tcp_device::TcpDevice, lorawan_device::LoRaWANDevice, communicator::LoRaWANCommunicator, configs::TcpDeviceConfig};
+use lorawan_device::{devices::tcp_device::TcpDevice, devices::lorawan_device::LoRaWANDevice, communicator::LoRaWANCommunicator, configs::TcpDeviceConfig};
 use hex::FromHex;
 use lorawan::{
     device::{Device, DeviceClass, LoRaWANVersion},

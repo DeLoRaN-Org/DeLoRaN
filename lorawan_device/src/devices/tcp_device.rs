@@ -5,7 +5,7 @@ use blockchain_api::{exec_bridge::BlockchainExeClient, BlockchainClient};
 use lorawan::{device::Device, utils::eui::EUI64, physical_parameters::SpreadingFactor};
 use tokio::{net::TcpStream, io::{AsyncWriteExt, AsyncReadExt}, sync::Mutex};
 
-use crate::{lorawan_device::LoRaWANDevice, communicator::{LoRaWANCommunicator, CommunicatorError, LoRaPacket}, configs::TcpDeviceConfig};
+use crate::{devices::lorawan_device::LoRaWANDevice, communicator::{LoRaWANCommunicator, CommunicatorError, LoRaPacket}, configs::TcpDeviceConfig};
 
 
 pub struct TcpDevice;

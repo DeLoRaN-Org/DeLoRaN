@@ -1,16 +1,17 @@
 use core::panic;
-use std::time::Duration;
+use std::{time::{Duration, Instant, SystemTime}, fs::OpenOptions};
 
 use lorawan_device::{
-    colosseum_device::{ColosseumCommunicator, ColosseumDevice},
+    devices::colosseum_device::{ColosseumCommunicator, ColosseumDevice},
     communicator::LoRaWANCommunicator,
     configs::{DeviceConfig, DeviceConfigType},
-    debug_device::DebugDevice,
-    lorawan_device::LoRaWANDevice,
-    radio_device::RadioDevice,
-    tcp_device::TcpDevice,
+    devices::debug_device::DebugDevice,
+    devices::lorawan_device::LoRaWANDevice,
+    devices::radio_device::RadioDevice,
+    devices::tcp_device::TcpDevice,
 };
 use tokio::time::sleep;
+use std::io::Write;
 
 #[async_trait::async_trait]
 pub trait Run {
@@ -31,16 +32,15 @@ impl<T: LoRaWANCommunicator + Send + Sync> Run for LoRaWANDevice<T> {
 
             self.set_dev_nonce(0);
 
-            for i in 0..3 {
+            for i in 0..5 {
                 match self.send_join_request().await {
                     Ok(_) => {
                         println!("{} joined after {i} tries", self.dev_eui());
-                        //println!("{}", **self);
                         break;
                     }
                     Err(e) => {
                         println!("Error while sending join request: {:?}", e);
-                        if i == 2 {
+                        if i == 4 {
                             panic!("Error cannot join: {:?}", e);
                         }
                     }
@@ -48,18 +48,20 @@ impl<T: LoRaWANCommunicator + Send + Sync> Run for LoRaWANDevice<T> {
             }
         }
 
-        let duration = 91_u64;
+        let duration = 101_u64;
         let mut errors = 0;
         for i in 0..30 {
             sleep(Duration::from_secs(duration)).await;
+
+            let before = Instant::now();
             match self
-                .send_uplink(
-                    Some(format!("confirmed {i} di {i} prova").as_bytes()),
-                    true,
-                    Some(1),
-                    None,
-                )
-                .await
+            .send_uplink(
+                Some(format!("confirmed {i} di {i} prova").as_bytes()),
+                true,
+                Some(1),
+                None,
+            )
+            .await
             {
                 Ok(_) => {
                     //println!("Uplink sent");
@@ -69,6 +71,17 @@ impl<T: LoRaWANCommunicator + Send + Sync> Run for LoRaWANDevice<T> {
                     errors += 1;
                 }
             }
+            let after = Instant::now();
+
+            {   
+                writeln!(OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(format!("/root/response_times_{}.csv", self.dev_eui()))
+                .expect("Failed to open file"), "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
+            }
+
+            
         }
         println!("Device {} ending, {} errors", self.dev_eui(), errors);
     }
@@ -78,7 +91,7 @@ pub async fn device_main(configs: Vec<&'static DeviceConfig>) {
     let mut handlers = Vec::new();
     let mut colosseum_communications = None;
     const SKIP_DEVICES: usize = 0;
-    const LIMIT: usize = 500;
+    const LIMIT: usize = 25;
 
     if SKIP_DEVICES + LIMIT > configs.len() {
         panic!("Not enough devices in config file");
@@ -124,7 +137,7 @@ pub async fn device_main(configs: Vec<&'static DeviceConfig>) {
             }
         };
         println!("Device {i} created");
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_secs(11)).await;
     }
 
     for (i, h) in handlers.into_iter().enumerate() {

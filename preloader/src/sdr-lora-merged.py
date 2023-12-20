@@ -1342,25 +1342,35 @@ def lora_chirp(mu, k, BW, K, OSF, t0_frac=0, phi0=0):
         (s, phi) = chirp(-mu * BW / 2, K * OSF, Ts, Df, t0_frac, phi0)
     return s, phi
 
-def calculate_power(samples):
-    return np.abs(samples)**2
 
-def calculate_mean_power(samples):
-    return np.mean(calculate_power(samples))
 
-def estimate_noise_power(samples):
-    total_power = np.sum(calculate_power(samples))
-    samples_power = calculate_mean_power(samples)
-    return total_power - samples_power
+class QualityParameters:
+    def __init__(self):
+        self.noise_power = 0
+        self.noise_samples = 0
+    
+    def calculate_power(samples):
+        return np.abs(samples)**2
 
-def calculate_snr(samples):
-    samples_power = calculate_mean_power(samples)
-    noise_power = estimate_noise_power(samples)
-    return 10 * np.log10(samples_power / noise_power)
+    @staticmethod
+    def calculate_mean_power(samples):
+        return np.mean(QualityParameters.calculate_power(samples))
 
-def calculate_rssi(samples):
-    samples_power = calculate_mean_power(samples)
-    return 10 * np.log10(samples_power)
+    @staticmethod
+    def calculate_snr(samples, noise):
+        samples_power = QualityParameters.calculate_mean_power(samples)
+        noise_power = QualityParameters.calculate_mean_power(noise)
+        return 10 * np.log10(samples_power / noise_power)
+    
+    def update_noise(noise):
+        noise_power = QualityParameters.calculate_mean_power(noise)
+        
+
+    @staticmethod
+    def calculate_rssi(samples):
+        samples_power = QualityParameters.calculate_mean_power(samples)
+        return 10 * np.log10(samples_power)
+
 
 def samples_decoding(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
 
@@ -1387,16 +1397,9 @@ def samples_decoding(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
             break
 
         if(success):
-            # print("success")
-            # print(payload)
-            # print("message","".join([chr(int(item)) for item in payload]))
-            # print("FCS Check", HDR_FCS_OK)
-            # print("MAC CRC",MAC_CRC_OK)
-            # print("PAYLOAD LENGTH", len(payload))
-
             print(f"CI:{cumulative_index}, LI: {last_index}, O: {offset}, S: {s.size}") if PRINT_DEBUG else None
-            
             print(f"CI:{cumulative_index}, LI: {last_index}, O: {offset}, N: {N}, OSF: {OSF}, NRISe: {Nrise}, SF: {SF}, TRISE: {Trise}")
+            
             #rssi = calculate_rssi(s[cumulative_index:])
             #snr = calculate_snr(s[cumulative_index:])
             pack_array[received] = LoRaPacket(payload,SRC,DST,SEQNO,HDR_FCS_OK,HAS_CRC,MAC_CRC_OK,CR,0,SF,BW, 0, 0)
@@ -1849,9 +1852,6 @@ class LoRaBufferedReceiver:
 
         for h in handlers:
             h.join()
-
-        #sleep(1) #TODO remove this sleep ODIO PYTHON
-        #print(f"Main receiver thread {d_id}, total packets {packets.qsize()}")
         return packets
 
 def receiver_routine():

@@ -1,4 +1,4 @@
-use application_server::application_server::ApplicationServer;
+use application_server::application_server::{ApplicationServer, ApplicationServerConfig};
 //use application_server::application_server::ApplicationServer;
 use clap::Parser;
 
@@ -11,15 +11,17 @@ struct Args {
     config: Option<String>,
 }
 
-
-
 #[tokio::main]
 async fn main() {
     let _args = Args::parse();
     
-    //tokio::spawn(async move {
-    //let application_server = ApplicationServer::init().await;
-    //application_server.routine().await.unwrap();
-    //}).await.unwrap();
+    static APPLICATION_SERVER_CONFIG: ApplicationServerConfig = ApplicationServerConfig {
+        tcp_receive_port: 1680,
+    };
+
+    tokio::spawn(async move {
+        let application_server = ApplicationServer::init(&APPLICATION_SERVER_CONFIG).await;
+        application_server.routine().await.unwrap();
+    }).await.unwrap();
 
 }

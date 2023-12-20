@@ -8,7 +8,7 @@ use std::{
 
 use application_server::application_server::{ApplicationServer, ApplicationServerConfig};
 use clap::Parser;
-use lorawan_device::{configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType, RadioDeviceConfig}, colosseum_device::ColosseumCommunicator, radio_device::RadioCommunicator};
+use lorawan_device::{configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType, RadioDeviceConfig}, devices::colosseum_device::ColosseumCommunicator, devices::radio_device::RadioCommunicator};
 use lazy_static::lazy_static;
 use lorawan::{
     device::{

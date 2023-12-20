@@ -14,7 +14,7 @@ use tokio::sync::{oneshot, mpsc};
 
 use crate::communicator::{LoRaPacket, extract_dev_id, CommunicatorError, LoRaWANCommunicator};
 use crate::configs::{RadioDeviceConfig, ColosseumDeviceConfig};
-use crate::lorawan_device::LoRaWANDevice;
+use crate::devices::lorawan_device::LoRaWANDevice;
 
 pub struct ColosseumDevice {
     device: LoRaWANDevice<ColosseumCommunicator>,
@@ -170,7 +170,7 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
                 .extract()
                 .unwrap()
         });
-
+        
         thread::spawn(move || {
             while let Some(((data, src, dest), sender)) = sender_recv.blocking_recv() {
                 //println!("{}", PrettyHexSlice(&data));

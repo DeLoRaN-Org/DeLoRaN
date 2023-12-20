@@ -1,9 +1,12 @@
+use std::fs::OpenOptions;
 use std::net::IpAddr;
+use std::time::Instant;
 use std::{collections::HashMap, time::SystemTime};
 use lorawan::{utils::{PrettyHexSlice, eui::EUI64}, device::Device};
 use serde::{Serialize, Deserialize};
 use serde_json::Value;
 use tokio::process::Command;
+use std::io::Write;
 
 
 use crate::{BlockchainDeviceSession, BlockchainDeviceConfig, BlockchainState, BlockchainPacket, BlockchainError};
@@ -90,18 +93,18 @@ impl BlockchainExeClient {
         //println!("peer {}", peer_args.join(" "));
         //return Err("abbalabba".to_owned());
 
-        //let before = Instant::now();
+        let before = Instant::now();
         let output = Command::new("peer").args(peer_args).output().await.map_err(|e| e.to_string())?;
-        //let after = Instant::now();
+        let after = Instant::now();
         
-        //{
-        //    let mut file = OpenOptions::new()
-        //    .append(true)
-        //    .create(true)
-        //    .open("/root/API_invoke_times.csv")
-        //    .expect("Failed to open file");
-        //    writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
-        //}
+        {
+            let mut file = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open("/root/API_invoke_times.csv")
+            .expect("Failed to open file");
+            writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
+        }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);

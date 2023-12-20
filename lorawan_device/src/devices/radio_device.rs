@@ -10,7 +10,7 @@ use lorawan::{device::Device, utils::eui::EUI64};
 
 use crate::communicator::{LoRaWANCommunicator, CommunicatorError, LoRaPacket};
 use crate::configs::RadioDeviceConfig;
-use crate::lorawan_device::LoRaWANDevice;
+use crate::devices::lorawan_device::LoRaWANDevice;
 
 pub struct RadioDevice {
     device: LoRaWANDevice<RadioCommunicator>,

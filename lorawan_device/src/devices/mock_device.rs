@@ -3,7 +3,7 @@ use std::{collections::HashMap, time::Duration};
 use async_trait::async_trait;
 use blockchain_api::{exec_bridge::BlockchainExeClient, BlockchainClient};
 use lorawan::{device::Device, utils::eui::EUI64, physical_parameters::SpreadingFactor};
-use crate::{communicator::{LoRaWANCommunicator, CommunicatorError, LoRaPacket}, lorawan_device::LoRaWANDevice, configs::MockDeviceConfig};
+use crate::{communicator::{LoRaWANCommunicator, CommunicatorError, LoRaPacket}, devices::lorawan_device::LoRaWANDevice, configs::MockDeviceConfig};
 
 pub struct MockDevice;
 impl MockDevice {
