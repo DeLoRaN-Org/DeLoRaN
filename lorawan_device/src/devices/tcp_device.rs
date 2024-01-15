@@ -40,9 +40,9 @@ impl From<TcpStream> for TCPCommunicator {
 impl LoRaWANCommunicator for TCPCommunicator {
     type Config = TcpDeviceConfig;
 
-    async fn from_config(config: &Self::Config) -> Result<Box<Self>, CommunicatorError> {
+    async fn from_config(config: &Self::Config) -> Result<Self, CommunicatorError> {
         let stream = TcpStream::connect(format!("{}:{}", config.addr, config.port)).await.unwrap();
-        Ok(Box::new(Self { stream: Mutex::new(stream) }))
+        Ok(Self { stream: Mutex::new(stream) })
     }
 
     async fn send_uplink(

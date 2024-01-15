@@ -212,7 +212,7 @@ impl NetworkController {
           BC: BlockchainClient + 'static { //TODO too many statics? maybe not
 
         let client: Arc<BC> = Arc::new(*BC::from_config(blockchain_config).await.unwrap());
-        let communicator = Arc::new(DebugCommunicator::from(*LC::from_config(config).await.unwrap(), None));
+        let communicator = Arc::new(DebugCommunicator::from(LC::from_config(config).await.unwrap(), None));
         loop {
             match communicator.receive_downlink(None).await {
                 Ok(mut content) => {

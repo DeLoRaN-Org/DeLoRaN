@@ -38,10 +38,10 @@ pub enum CommunicatorError {
 }
 
 #[async_trait]
-pub trait LoRaWANCommunicator: Send + Sync {
+pub trait LoRaWANCommunicator: Send + Sync + Sized {
     type Config: Send + Sync;
     
-    async fn from_config(config: &Self::Config) -> Result<Box<Self>, CommunicatorError>;
+    async fn from_config(config: &Self::Config) -> Result<Self, CommunicatorError>;
     
     async fn send_uplink(
         &self,

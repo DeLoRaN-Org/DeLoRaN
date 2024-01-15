@@ -118,7 +118,7 @@ pub async fn device_main(configs: Vec<&'static DeviceConfig>) {
             DeviceConfigType::COLOSSEUM(c) => {
                 if colosseum_communications.is_none() {
                     colosseum_communications =
-                        Some(*ColosseumCommunicator::from_config(c).await.unwrap());
+                        Some(ColosseumCommunicator::from_config(c).await.unwrap());
                 }
                 let cloned = colosseum_communications.as_ref().cloned().unwrap();
 

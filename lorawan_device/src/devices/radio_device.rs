@@ -18,14 +18,14 @@ pub struct RadioDevice {
 
 impl RadioDevice  {
     pub async fn create(device: Device, config: &RadioDeviceConfig) -> LoRaWANDevice<RadioCommunicator> {
-        LoRaWANDevice::new(device, *RadioCommunicator::from_config(config).await.unwrap())
+        LoRaWANDevice::new(device, RadioCommunicator::from_config(config).await.unwrap())
     }
 
     pub async fn from_blockchain(dev_eui: &EUI64, config: &RadioDeviceConfig) -> LoRaWANDevice<RadioCommunicator> {
         let client = BlockchainExeClient::new("orderer1.orderers.dlwan.phd:6050", "lorawan", "lorawan", None);
         let device = client.get_device(dev_eui).await.unwrap();
 
-        LoRaWANDevice::new(device, *RadioCommunicator::from_config(config).await.unwrap())
+        LoRaWANDevice::new(device, RadioCommunicator::from_config(config).await.unwrap())
     }
 }
 
@@ -58,8 +58,8 @@ pub struct RadioCommunicator {
 impl LoRaWANCommunicator for RadioCommunicator {
     type Config = RadioDeviceConfig;
 
-    async fn from_config(config: &Self::Config) -> Result<Box<Self>, CommunicatorError> {
-        Ok(Box::new(Self { config: *config }))
+    async fn from_config(config: &Self::Config) -> Result<Self, CommunicatorError> {
+        Ok(Self { config: *config })
     }
 
     async fn send_uplink(

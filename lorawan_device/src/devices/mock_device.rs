@@ -26,8 +26,8 @@ pub struct MockCommunicator;
 impl LoRaWANCommunicator for MockCommunicator {
     type Config = MockDeviceConfig;
 
-    async fn from_config(_config: &Self::Config) -> Result<Box<Self>, CommunicatorError> {
-        Ok(Box::new(Self))
+    async fn from_config(_config: &Self::Config) -> Result<Self, CommunicatorError> {
+        Ok(Self)
     }
 
 

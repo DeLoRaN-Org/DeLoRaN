@@ -28,7 +28,7 @@ use crate::device::device_main;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
-///Preloader for DistributedLoRaWAN Docker
+///Preloader for DeLoRaN
 struct Args {
     /// Path of the configuration JSON file.
     #[clap(short, long, value_parser)]

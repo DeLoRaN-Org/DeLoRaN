@@ -26,7 +26,7 @@ impl ColosseumDevice {
         if let Err(e) =  c.register_device(*device.dev_eui()).await {
             eprintln!("{e:?}")
         } 
-        LoRaWANDevice::new(device, *c)
+        LoRaWANDevice::new(device, c)
     }
     
     pub async fn with_shared_communicator(device: Device,  mut communicator: ColosseumCommunicator) -> LoRaWANDevice<ColosseumCommunicator> {
@@ -44,7 +44,7 @@ impl ColosseumDevice {
         if let Err(e) =  c.register_device(*device.dev_eui()).await {
             eprintln!("{e:?}")
         }
-        LoRaWANDevice::new(device, *c)
+        LoRaWANDevice::new(device, c)
     }
 }
 
@@ -138,7 +138,7 @@ impl ColosseumCommunicator {
 impl LoRaWANCommunicator for ColosseumCommunicator {
     type Config = ColosseumDeviceConfig;
     
-    async fn from_config(config: &ColosseumDeviceConfig) -> Result<Box<Self>, CommunicatorError> {
+    async fn from_config(config: &ColosseumDeviceConfig) -> Result<Self, CommunicatorError> {
         let radio_config = config.radio_config;
         let (sender_send, mut sender_recv) =
             mpsc::channel::<SenderChannel>(200);
@@ -227,12 +227,12 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
             println!("Thread receiver died");
         });
         
-        Ok(Box::new(Self {
+        Ok(Self {
             sender_send,
             receiver_send,
             radio_config,
             dev_id: config.radio_config.dev_id,
-        }))
+        })
     }
 
     async fn send_uplink(

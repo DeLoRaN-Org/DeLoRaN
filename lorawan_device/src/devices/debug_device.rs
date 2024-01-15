@@ -90,11 +90,11 @@ impl<T: LoRaWANCommunicator> DerefMut for DebugCommunicator<T> {
 impl<T: LoRaWANCommunicator> LoRaWANCommunicator for DebugCommunicator<T> {
     type Config = T::Config;
 
-    async fn from_config(config: &Self::Config) -> Result<Box<Self>, CommunicatorError> {
-        Ok(Box::new(Self {
-            communicator: *T::from_config(config).await.unwrap(),
+    async fn from_config(config: &Self::Config) -> Result<Self, CommunicatorError> {
+        Ok(Self {
+            communicator: T::from_config(config).await.unwrap(),
             id: None
-        }))
+        })
     }
 
     async fn send_uplink(
