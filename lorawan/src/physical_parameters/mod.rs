@@ -7,7 +7,6 @@ use crate::regional_parameters::region::Region;
 #[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
 
 pub struct SpreadingFactor(u8);
-
 impl SpreadingFactor {
     pub fn new(i: u8) -> Self {
         match i {
@@ -49,6 +48,14 @@ impl DataRate {
             16.. => 15,
         }
     }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CodeRate {
+    CR4_5,
+    CR4_6,
+    CR5_7,
+    CR4_8,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
