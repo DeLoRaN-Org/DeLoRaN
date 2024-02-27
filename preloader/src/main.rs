@@ -41,6 +41,7 @@ struct Args {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NetworkControllerConfig {
     pub n_id: String,
+    pub orderer_address: String,
     tcp_config: Option<NetworkControllerTCPConfig>,
     radio_config: Option<RadioDeviceConfig>,
     colosseum_config: Option<ColosseumDeviceConfig>,
@@ -78,8 +79,14 @@ async fn network_controller_main(config: &'static NetworkControllerConfig) {
     );
 
     lazy_static!(
+        static ref CONFIG: Config = serde_json::from_reader::<BufReader<File>, Config>(BufReader::new(
+            File::open(Args::parse().config.unwrap()).unwrap(),
+        ))
+        .unwrap();
+
+
         static ref BC_CONFIG: BlockchainExeConfig = BlockchainExeConfig {
-            orderer_addr: "orderer1.orderers.dlwan.phd:6050".to_string(),
+            orderer_addr: CONFIG.network_controller.as_ref().unwrap().orderer_address.clone(),
             channel_name: "lorawan".to_string(),
             chaincode_name: "lorawan".to_string(),
             orderer_ca_file_path: None,
@@ -131,7 +138,7 @@ pub fn create_initialized_device() -> Device {
     device
 }
 
-#[tokio::main(flavor = "multi_thread", worker_threads = 20)]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), std::io::Error> {
     let _config = Config {
         devices: None,
@@ -144,6 +151,7 @@ async fn main() -> Result<(), std::io::Error> {
         }),
         network_controller: Some(NetworkControllerConfig {
             n_id: "ns_test_1".to_string(),
+            orderer_address: "orderer1.orderers.dlwan.phd".to_string(),
             tcp_config: Some(NetworkControllerTCPConfig {
                 tcp_dev_port: 9090,
                 tcp_nc_port: 9091,

@@ -1,10 +1,11 @@
     
-use std::{fs, collections::HashMap, ops::Deref, process::{Command, Stdio}, io::Write, time::Duration};
+use std::{collections::HashMap, fs, io::Write, net::Ipv4Addr, ops::Deref, process::{Command, Stdio}, time::Duration};
 use blockchain_api::BlockchainDeviceConfig;
-use lorawan_device::{configs::{RadioDeviceConfig, DeviceConfig, DeviceConfigType, ColosseumDeviceConfig}, communicator::extract_dev_id};
+use lorawan_device::{configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType, RadioDeviceConfig, TcpDeviceConfig}, communicator::extract_dev_id};
 use lorawan::{device::{Device, DeviceClass, LoRaWANVersion}, regional_parameters::region::{RegionalParameters, Region}, utils::{eui::EUI64, PrettyHexSlice}, encryption::key::Key, physical_parameters::{SpreadingFactor, DataRate}};
 use serde::{Serialize, Deserialize};
 use serde_json::json;
+use tokio::net::tcp;
 
 #[allow(non_snake_case)]
 #[derive(Serialize)]
@@ -57,9 +58,9 @@ fn create_configs(devices_to_skip: usize, num_devices: usize, devices_per_device
     let mut devices = Vec::new();
 
     let mut index = 0;
-    let colosseum_address = "192.169.40.2".parse().unwrap();
+    let colosseum_address: Ipv4Addr = "192.169.40.2".parse().unwrap();
 
-
+    let mut i = 0;
     file_content.split('\n').skip(devices_to_skip).take(num_devices * devices_per_device).for_each(|line| {
         let splitted = line.split(',').collect::<Vec<&str>>();
         let dev_eui = splitted[0];
@@ -87,15 +88,50 @@ fn create_configs(devices_to_skip: usize, num_devices: usize, devices_per_device
             "command": create_device_command(&d)
         }));
 
-        let config = DeviceConfig {
+        /*let config = DeviceConfig {
             configuration: d,
             dtype: DeviceConfigType::COLOSSEUM(ColosseumDeviceConfig {
                 radio_config: r,
                 address: colosseum_address,
                 sdr_code: String::from("./src/sdr-lora-merged.py")
             }),
+        };*/
+
+
+
+        let addresses = [
+            "10.207.19.155",
+            "10.207.19.20",
+            "10.207.19.81",
+            "10.207.19.223",
+            "10.207.19.66",
+            "10.207.19.206",
+            "10.207.19.38",
+            "10.207.19.26",
+            "10.207.19.94",
+            "10.207.19.113",
+            "10.207.19.95",
+            "10.207.19.70",
+            "10.207.19.71",
+            "10.207.19.24",
+            "10.207.19.212",
+            "10.207.19.102",
+        ];
+
+
+        let tcp_config = TcpDeviceConfig {
+            addr: addresses[i % addresses.len()].to_string(),
+            port: 9090,
         };
+
+        let config = DeviceConfig {
+            configuration: d,
+            dtype: DeviceConfigType::TCP(tcp_config),
+        };
+
         devices.push(serde_json::to_value(config).unwrap());
+        
+         i+= 1;
 
         if devices.len() == devices_per_device {
             let path = format!("./configs/{index}_config.json");
@@ -155,8 +191,8 @@ async fn main() {
     let nc_endpoint = ["wineslab-049"];
     #[allow(unused)]
     let devices_endpoint = ["wineslab-049"];
-    let devices_per_device = 25;
-    create_configs(0, 5, devices_per_device);
+    let devices_per_device = 10000;
+    create_configs(0, 1, devices_per_device);
     //send_commands(&nc_endpoint, devices_per_device);
     Ok::<(), ()>(()).or(Err::<(), ()>(())).unwrap(); //last line is a hack to make the compiler happy
 }

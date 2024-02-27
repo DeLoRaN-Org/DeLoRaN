@@ -1,1 +1,1 @@
-{ "dependencies": { "bun-types": "^1.0.5-canary.20231005T140125" } }
+{ "dependencies": { "bun-types": "^1.0.26", "chartjs-node-canvas": "^4.1.6" } }

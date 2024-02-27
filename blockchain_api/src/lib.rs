@@ -1,5 +1,5 @@
 pub mod exec_bridge;
-pub mod tcp_bridge;
+pub mod http_bridge;
 pub mod mock_bridge;
 pub mod convergence;
 

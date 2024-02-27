@@ -97,7 +97,7 @@ impl BlockchainExeClient {
         let output = Command::new("peer").args(peer_args).output().await.map_err(|e| e.to_string())?;
         let after = Instant::now();
         
-        {
+        if true {
             let mut file = OpenOptions::new()
             .append(true)
             .create(true)

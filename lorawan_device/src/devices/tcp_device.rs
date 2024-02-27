@@ -1,27 +1,58 @@
-use std::{time::Duration, collections::HashMap};
+use std::{collections::HashMap, time::Duration};
 
 use async_trait::async_trait;
 use blockchain_api::{exec_bridge::BlockchainExeClient, BlockchainClient};
-use lorawan::{device::Device, utils::eui::EUI64, physical_parameters::SpreadingFactor};
-use tokio::{net::TcpStream, io::{AsyncWriteExt, AsyncReadExt}, sync::Mutex};
+use lorawan::{device::Device, physical_parameters::SpreadingFactor, utils::eui::EUI64};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+    sync::Mutex,
+};
 
-use crate::{devices::lorawan_device::LoRaWANDevice, communicator::{LoRaWANCommunicator, CommunicatorError, LoRaPacket}, configs::TcpDeviceConfig};
+use lorawan::utils::errors::LoRaWANError;
 
+use crate::{
+    communicator::{CommunicatorError, LoRaPacket, LoRaWANCommunicator},
+    configs::TcpDeviceConfig,
+    devices::lorawan_device::LoRaWANDevice,
+};
 
 pub struct TcpDevice;
 impl TcpDevice {
-    pub async fn create(device: Device, config: &TcpDeviceConfig) -> LoRaWANDevice<TCPCommunicator> {
+    pub async fn create(
+        device: Device,
+        config: &TcpDeviceConfig,
+    ) -> LoRaWANDevice<TCPCommunicator> {
         LoRaWANDevice::new(
             device,
-            TCPCommunicator::from(TcpStream::connect(format!("{}:{}", config.addr, config.port)).await.unwrap()),
+            TCPCommunicator::from(
+                TcpStream::connect(format!("{}:{}", config.addr, config.port))
+                    .await
+                    .unwrap(),
+            ),
             //DeviceConfig { configuration: device, dtype: DeviceConfigType::TCP(TcpDeviceConfig { addr, port })  }
         )
     }
 
-    pub async fn from_blockchain(dev_eui: &EUI64,config: &TcpDeviceConfig) -> LoRaWANDevice<TCPCommunicator> {
-        let client = BlockchainExeClient::new("orderer1.orderers.dlwan.phd:6050", "lorawan", "lorawan", None);
+    pub async fn from_blockchain(
+        dev_eui: &EUI64,
+        config: &TcpDeviceConfig,
+    ) -> LoRaWANDevice<TCPCommunicator> {
+        let client = BlockchainExeClient::new(
+            "orderer1.orderers.dlwan.phd:6050",
+            "lorawan",
+            "lorawan",
+            None,
+        );
         let device = client.get_device(dev_eui).await.unwrap();
-        LoRaWANDevice::new(device, TCPCommunicator::from(TcpStream::connect(format!("{}:{}", config.addr, config.port)).await.unwrap()))
+        LoRaWANDevice::new(
+            device,
+            TCPCommunicator::from(
+                TcpStream::connect(format!("{}:{}", config.addr, config.port))
+                    .await
+                    .unwrap(),
+            ),
+        )
         /*DeviceConfig { configuration: device, dtype: DeviceConfigType::TCP(TcpDeviceConfig { addr, port })}*/
     }
 }
@@ -32,7 +63,9 @@ pub struct TCPCommunicator {
 
 impl From<TcpStream> for TCPCommunicator {
     fn from(stream: TcpStream) -> Self {
-        Self { stream: Mutex::new(stream) }
+        Self {
+            stream: Mutex::new(stream),
+        }
     }
 }
 
@@ -41,8 +74,12 @@ impl LoRaWANCommunicator for TCPCommunicator {
     type Config = TcpDeviceConfig;
 
     async fn from_config(config: &Self::Config) -> Result<Self, CommunicatorError> {
-        let stream = TcpStream::connect(format!("{}:{}", config.addr, config.port)).await.unwrap();
-        Ok(Self { stream: Mutex::new(stream) })
+        let stream = TcpStream::connect(format!("{}:{}", config.addr, config.port))
+            .await
+            .unwrap();
+        Ok(Self {
+            stream: Mutex::new(stream),
+        })
     }
 
     async fn send_uplink(
@@ -57,11 +94,25 @@ impl LoRaWANCommunicator for TCPCommunicator {
 
     async fn receive_downlink(
         &self,
-        _timeout: Option<Duration>,
+        timeout: Option<Duration>,
     ) -> Result<HashMap<SpreadingFactor, LoRaPacket>, CommunicatorError> {
         let mut buf = Vec::with_capacity(256);
         let mut stream = self.stream.lock().await;
-        let _len = stream.read_buf(&mut buf).await?;
+        match timeout {
+            Some(d) => {
+                if tokio::time::timeout(d, stream.read_buf(&mut buf))
+                    .await
+                    .is_err()
+                {
+                    return Err(CommunicatorError::LoRaWANError(
+                        LoRaWANError::MissingDownlink,
+                    ));
+                }
+            }
+            None => {
+                stream.read_buf(&mut buf).await?;
+            }
+        }
 
         let packet = LoRaPacket {
             payload: buf,

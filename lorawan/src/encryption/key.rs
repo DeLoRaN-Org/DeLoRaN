@@ -19,7 +19,11 @@ impl Key {
 
     pub fn from_hex(hex_str: &str) -> Result<Self,LoRaWANError> {
         let mut v: [u8; 16] = [0; 16];
-        v.copy_from_slice(&Vec::from_hex(hex_str).map_err(|_| LoRaWANError::InvalidKeyBuffer)?); 
+        let vec = Vec::from_hex(hex_str).map_err(|_| LoRaWANError::InvalidKeyBuffer)?;
+        if vec.len() != 16 {
+            return Err(LoRaWANError::InvalidKeyBuffer);
+        }
+        v.copy_from_slice(&vec); 
         Ok(Key::from(v))
     } 
 }

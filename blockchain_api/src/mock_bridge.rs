@@ -215,7 +215,7 @@ impl BlockchainClient for BlockchainMockClient {
     }
 
     async fn get_device_org(&self, _dev_id: &[u8]) -> Result<String, BlockchainError> {
-        Ok(String::from("Org1MSP"))
+        Ok(s!("Org1MSP"))
     }
 
     async fn get_org_anchor_address(&self, _org: &str) -> Result<(IpAddr, u16), BlockchainError> {

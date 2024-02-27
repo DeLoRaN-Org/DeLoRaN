@@ -187,6 +187,7 @@ impl NetworkController {
             if bytes_read == 0 {break}
             let mhdr: MHDR = MHDR::from_bytes(buf[0]);
             let answer = Self::dispatch_task(&mhdr, &buf[..bytes_read], &bc_client).await;
+            //println!("created answer");
             match answer {
                 Ok(ans) => {
                     if let Some((in_answer, _)) = &ans {
@@ -268,7 +269,6 @@ impl NetworkController {
             let dev_socket = TcpListener::bind(dev_addr).await.unwrap();
             //println!("Waiting for connections...");
             while let Ok((cl_sock, _addr)) = dev_socket.accept().await {
-                //println!("Received connection");
                 //let mm = m.clone();
                 let c = Arc::clone(&client);
                 tokio::spawn(async move {
