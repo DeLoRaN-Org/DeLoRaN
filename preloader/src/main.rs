@@ -16,7 +16,7 @@ use lorawan::{
         Device, DeviceClass, LoRaWANVersion,
     },
     encryption::key::Key,
-    physical_parameters::{DataRate, SpreadingFactor},
+    physical_parameters::{CodeRate, DataRate, SpreadingFactor},
     regional_parameters::region::Region,
     utils::eui::EUI64,
 };
@@ -162,13 +162,13 @@ async fn main() -> Result<(), std::io::Error> {
                 data_rate: DataRate::new(5),
                 rx_gain: 10,
                 tx_gain: 20,
-                bandwidth: 125_000,
+                bandwidth: 125_000.0,
                 sample_rate: 1_000_000.0,
                 rx_freq: 990_000_000.0,
                 tx_freq: 1_010_000_000.0,
                 rx_chan_id: 0,
                 tx_chan_id: 1,
-                dev_id: 0
+                code_rate: CodeRate::CR4_5
             }),
             colosseum_config: Some(ColosseumDeviceConfig {
                 radio_config: RadioDeviceConfig {
@@ -177,16 +177,17 @@ async fn main() -> Result<(), std::io::Error> {
                     data_rate: DataRate::new(5),
                     rx_gain: 10,
                     tx_gain: 20,
-                    bandwidth: 125_000,
+                    bandwidth: 125_000.0,
                     sample_rate: 1_000_000.0,
                     rx_freq: 990_000_000.0,
                     tx_freq: 1_010_000_000.0,
                     rx_chan_id: 0,
                     tx_chan_id: 1,
-                    dev_id: 0
+                    code_rate: CodeRate::CR4_5
                 },
                 address: IpAddr::V4(Ipv4Addr::LOCALHOST),
-                sdr_code: String::from("./src/sdr-lora-merged.py")
+                sdr_code: String::from("./src/sdr-lora-merged.py"),
+                dev_id: 0
             }),
         }),
         application_server: Some(ApplicationServerConfig {

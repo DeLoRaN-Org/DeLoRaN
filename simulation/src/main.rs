@@ -2,13 +2,13 @@
 mod chirpstack;
 mod compiled;
 
-use std::{fs::{self, File, OpenOptions}, io::BufReader, net::Ipv4Addr, path::Path, process::Command as SyncCommand, str::FromStr, time::{Duration, SystemTime}};
+use std::{fs::{self, File, OpenOptions}, io::BufReader, time::{Duration, SystemTime}};
 use blockchain_api::{BlockchainClient, exec_bridge::BlockchainExeClient};
 
 use lorawan_device::{configs::{DeviceConfig, TcpDeviceConfig}, devices::{debug_device::DebugDevice, tcp_device::TcpDevice}};
 use lorawan::{utils::{eui::EUI64, PrettyHexSlice}, device::{Device, DeviceClass, LoRaWANVersion}, regional_parameters::region::{Region, RegionalParameters}, encryption::key::Key};
 use serde::Deserialize;
-use tokio::{process::Command, sync::mpsc, task::JoinHandle, time::Instant};
+use tokio::{task::JoinHandle, time::Instant};
 use std::io::Write;
 
 const NUM_DEVICES: usize = 8000;
@@ -22,52 +22,6 @@ const DEVICES_TO_SKIP: usize = 0;
 const JUST_CREATE_DEVICE: bool = false;
 const STARTING_DEV_NONCE: u32 = 30;
 
-#[derive(Debug)]
-enum Stats {
-    Rtt,
-    Usage,
-}
-
-#[derive(Debug)]
-struct Msg {
-    stats: Stats,
-    thread_id: usize,
-    content: String,
-}
-
-impl Msg {
-    pub fn into_csv(self) -> String {
-        match self.stats {
-            Stats::Rtt => format!("{},{}", self.thread_id, self.content),
-            Stats::Usage => self.content,
-        }
-    }
-}
-
-
-async fn stats_holder(mut receiver: mpsc::Receiver<Msg>) {
-    let rtt_path = format!("./output/rtt_d{}_p{}_{}.csv", NUM_DEVICES, NUM_PACKETS, SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis());
-    let mut rtt_file = File::create(rtt_path).unwrap();
-
-    let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis();
-    
-    let sls_path = format!("./output/simulation_stats_{timestamp}.csv");
-
-    let usage_live_stats_path = Path::new(&sls_path);
-    let mut usage_stats_file = File::create(usage_live_stats_path).unwrap();
-    writeln!(usage_stats_file, "timestamp,name,cpu,ram,n_i_diff,n_o_diff").unwrap();
-    
-    writeln!(rtt_file, "thread_id,rtt,tmst").unwrap();
-
-    while let Some(msg) = receiver.recv().await {
-        match msg.stats {
-            Stats::Rtt => writeln!(rtt_file, "{}", msg.into_csv()).unwrap(),
-            Stats::Usage => writeln!(usage_stats_file, "{}", msg.into_csv()).unwrap(),
-        }
-    }
-
-    println!("Channel closed, quitting stats_holder");
-}
 
 
 #[derive(Deserialize)]
@@ -108,74 +62,6 @@ async fn create_all_devices() {
     }
 }
 
-async fn network_live_stats_loop(sender: mpsc::Sender<Msg>) {
-    let output = Command::new("sh")
-        .args([
-            "-c",
-            r#"docker stats --no-stream | grep "example.com" | awk {'print $2'}"#,
-        ])
-        .output().await
-        .unwrap();
-
-    let output_str = String::from_utf8_lossy(&output.stdout);
-    let entities_names = output_str.trim()
-        .split('\n').map(|line| {
-            line.trim()
-        }).collect::<Vec<&str>>();
-    
-    let num_entities = entities_names.len();
-
-    let mut last_input = vec![0_usize; num_entities];
-    let mut last_output = vec![0_usize; num_entities];
-
-    let usage_lock_path = Path::new("./output/simulation.lock");
-
-    let start = Instant::now();
-
-    while usage_lock_path.exists() {
-        //let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis();
-
-        let cmd = r#"docker stats --no-stream | grep "example.com" | awk '{print $2 "," $3 "," $4}'"#;
-        let output = Command::new("sh")
-                    .args(["-c", cmd])
-                    .output().await
-                    .unwrap();
-        let lines = String::from_utf8_lossy(&output.stdout);
-        let trimmed = lines.trim();
-
-        let content = trimmed.split('\n').enumerate().map(|(i,line)| {
-            let ncr_vec = line.split(',').collect::<Vec<&str>>();
-            let name = ncr_vec[0];
-            let cpu = ncr_vec[1];
-            let ram = ncr_vec[2];
-            
-            let command = format!("docker exec {name} sh -c 'cat /proc/net/dev' | grep eth0 | awk {{'print $2 \",\" $10'}}");
-            let output = SyncCommand::new("sh")
-                    .args(["-c", command.as_str()])
-                    .output()
-                    .unwrap();
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let in_out = stdout.trim().split(',').map(|v| v.parse().unwrap()).collect::<Vec<usize>>();
-            let ni = in_out[0];
-            let no = in_out[1];
-            
-            let n_i_diff = ni - last_input[i];
-            let n_o_diff = no - last_output[i];
-            last_input[i] = ni;
-            last_output[i] = no;
-
-            format!("{},{name},{cpu},{ram},{n_i_diff},{n_o_diff}", start.elapsed().as_millis())
-        }).collect::<Vec<String>>();
-        
-        for line in content {
-            sender.send(Msg {
-                stats: Stats::Usage,
-                thread_id: 0,
-                content: line 
-            }).await.unwrap();
-        }
-    }
-}
 
 async fn blockchain_main() {
     if JUST_CREATE_DEVICE {
@@ -297,3 +183,123 @@ fn main() {
         .unwrap()
         .block_on(blockchain_main())
 }
+
+
+/*
+#[derive(Debug)]
+enum Stats {
+    Rtt,
+    Usage,
+}
+
+#[derive(Debug)]
+struct Msg {
+    stats: Stats,
+    thread_id: usize,
+    content: String,
+}
+
+impl Msg {
+    pub fn into_csv(self) -> String {
+        match self.stats {
+            Stats::Rtt => format!("{},{}", self.thread_id, self.content),
+            Stats::Usage => self.content,
+        }
+    }
+}
+
+
+async fn stats_holder(mut receiver: mpsc::Receiver<Msg>) {
+    let rtt_path = format!("./output/rtt_d{}_p{}_{}.csv", NUM_DEVICES, NUM_PACKETS, SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis());
+    let mut rtt_file = File::create(rtt_path).unwrap();
+
+    let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis();
+    
+    let sls_path = format!("./output/simulation_stats_{timestamp}.csv");
+
+    let usage_live_stats_path = Path::new(&sls_path);
+    let mut usage_stats_file = File::create(usage_live_stats_path).unwrap();
+    writeln!(usage_stats_file, "timestamp,name,cpu,ram,n_i_diff,n_o_diff").unwrap();
+    
+    writeln!(rtt_file, "thread_id,rtt,tmst").unwrap();
+
+    while let Some(msg) = receiver.recv().await {
+        match msg.stats {
+            Stats::Rtt => writeln!(rtt_file, "{}", msg.into_csv()).unwrap(),
+            Stats::Usage => writeln!(usage_stats_file, "{}", msg.into_csv()).unwrap(),
+        }
+    }
+
+    println!("Channel closed, quitting stats_holder");
+}
+
+async fn network_live_stats_loop(sender: mpsc::Sender<Msg>) {
+    let output = Command::new("sh")
+        .args([
+            "-c",
+            r#"docker stats --no-stream | grep "example.com" | awk {'print $2'}"#,
+        ])
+        .output().await
+        .unwrap();
+
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    let entities_names = output_str.trim()
+        .split('\n').map(|line| {
+            line.trim()
+        }).collect::<Vec<&str>>();
+    
+    let num_entities = entities_names.len();
+
+    let mut last_input = vec![0_usize; num_entities];
+    let mut last_output = vec![0_usize; num_entities];
+
+    let usage_lock_path = Path::new("./output/simulation.lock");
+
+    let start = Instant::now();
+
+    while usage_lock_path.exists() {
+        //let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis();
+
+        let cmd = r#"docker stats --no-stream | grep "example.com" | awk '{print $2 "," $3 "," $4}'"#;
+        let output = Command::new("sh")
+                    .args(["-c", cmd])
+                    .output().await
+                    .unwrap();
+        let lines = String::from_utf8_lossy(&output.stdout);
+        let trimmed = lines.trim();
+
+        let content = trimmed.split('\n').enumerate().map(|(i,line)| {
+            let ncr_vec = line.split(',').collect::<Vec<&str>>();
+            let name = ncr_vec[0];
+            let cpu = ncr_vec[1];
+            let ram = ncr_vec[2];
+            
+            let command = format!("docker exec {name} sh -c 'cat /proc/net/dev' | grep eth0 | awk {{'print $2 \",\" $10'}}");
+            let output = SyncCommand::new("sh")
+                    .args(["-c", command.as_str()])
+                    .output()
+                    .unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let in_out = stdout.trim().split(',').map(|v| v.parse().unwrap()).collect::<Vec<usize>>();
+            let ni = in_out[0];
+            let no = in_out[1];
+            
+            let n_i_diff = ni - last_input[i];
+            let n_o_diff = no - last_output[i];
+            last_input[i] = ni;
+            last_output[i] = no;
+
+            format!("{},{name},{cpu},{ram},{n_i_diff},{n_o_diff}", start.elapsed().as_millis())
+        }).collect::<Vec<String>>();
+        
+        for line in content {
+            sender.send(Msg {
+                stats: Stats::Usage,
+                thread_id: 0,
+                content: line 
+            }).await.unwrap();
+        }
+    }
+}
+
+*/

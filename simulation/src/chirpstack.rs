@@ -1,20 +1,17 @@
-#![allow(non_snake_case)]
+#![allow(non_snake_case, unused)]
 
-use core::panic;
-use std::{collections::{HashMap, HashSet}, time::{Duration, Instant, SystemTime}, fs::File, path::Path, process::Command as SyncCommand};
+use std::{collections::HashMap, time::{Duration, Instant, SystemTime}, fs::File, path::Path, process::Command as SyncCommand};
 
 use lorawan_device::{devices::tcp_device::TcpDevice, devices::lorawan_device::LoRaWANDevice, communicator::LoRaWANCommunicator, configs::TcpDeviceConfig};
-use hex::FromHex;
 use lorawan::{
     device::{Device, DeviceClass, LoRaWANVersion},
     encryption::key::Key,
-    regional_parameters::region::Region,
-    utils::{eui::EUI64, PrettyHexSlice}, lorawan_packet::{LoRaWANPacket, mhdr::MType, join::JoinAcceptPayload, payload::Payload},
+    utils::eui::EUI64, lorawan_packet::{LoRaWANPacket, mhdr::MType, payload::Payload},
 };
 use paho_mqtt::Client;
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use tokio::{net::TcpStream, sync::mpsc, process::Command};
+use tokio::{sync::mpsc, process::Command};
 use std::io::Write;
 
 use crate::{compiled::gw::{UplinkFrame, UplinkTxInfo, Modulation, modulation::Parameters, LoraModulationInfo, UplinkRxInfo, DownlinkFrame}, RANDOM_JOIN_DELAY, RANDOM_PACKET_DELAY, FIXED_PACKET_DELAY, NUM_PACKETS, NUM_DEVICES};

@@ -6,21 +6,39 @@ use crate::regional_parameters::region::Region;
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
 
-pub struct SpreadingFactor(u8);
-impl SpreadingFactor {
-    pub fn new(i: u8) -> Self {
-        match i {
-            0..=6 => Self(7),
-            7..=12 => Self(i),
-            13.. => Self(12),
+
+pub enum SpreadingFactor {
+    SF7,
+    SF8,
+    SF9,
+    SF10,
+    SF11,
+    SF12,
+}
+
+impl SpreadingFactor {    
+    pub fn new(sf: u8) -> Self {
+        match sf {
+            0..=6 => SpreadingFactor::SF7,
+            7 => SpreadingFactor::SF7,
+            8 => SpreadingFactor::SF8,
+            9 => SpreadingFactor::SF9,
+            10 => SpreadingFactor::SF10,
+            11 => SpreadingFactor::SF11,
+            12 => SpreadingFactor::SF12,
+            _ => SpreadingFactor::SF12,
         }
     }
-    
+
+
     pub fn value(&self) -> u8 {
-        match self.0 {
-            0..=6 => 7,
-            7..=12 => self.0,
-            13.. => 12,
+        match self {
+            SpreadingFactor::SF7 => 7,
+            SpreadingFactor::SF8 => 8,
+            SpreadingFactor::SF9 => 9,
+            SpreadingFactor::SF10 => 10,
+            SpreadingFactor::SF11 => 11,
+            SpreadingFactor::SF12 => 12,
         }
     }
 }
@@ -32,20 +50,66 @@ impl Display for SpreadingFactor {
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
-pub struct DataRate(u8);
+pub enum DataRate {
+    DR0,
+    DR1,
+    DR2,
+    DR3,
+    DR4,
+    DR5,
+    DR6,
+    DR7,
+    DR8,
+    DR9,
+    DR10,
+    DR11,
+    DR12,
+    DR13,
+    DR14,
+    DR15,
+}
 
 impl DataRate {
     pub fn new(i: u8) -> Self {
         match i {
-            0..=15 => Self(i),
-            16.. => Self(15),
+            0 => DataRate::DR0,
+            1 => DataRate::DR1,
+            2 => DataRate::DR2,
+            3 => DataRate::DR3,
+            4 => DataRate::DR4,
+            5 => DataRate::DR5,
+            6 => DataRate::DR6,
+            7 => DataRate::DR7,
+            8 => DataRate::DR8,
+            9 => DataRate::DR9,
+            10 => DataRate::DR10,
+            11 => DataRate::DR11,
+            12 => DataRate::DR12,
+            13 => DataRate::DR13,
+            14 => DataRate::DR14,
+            15 => DataRate::DR15,
+            16.. => DataRate::DR15,
         }
     }
 
     pub fn value(&self) -> u8 {
-        match self.0 {
-            0..=15 => self.0,
-            16.. => 15,
+        match self {
+            DataRate::DR0 => 0,
+            DataRate::DR1 => 1,
+            DataRate::DR2 => 2,
+            DataRate::DR3 => 3,
+            DataRate::DR4 => 4,
+            DataRate::DR5 => 5,
+            DataRate::DR6 => 6,
+            DataRate::DR7 => 7,
+            DataRate::DR8 => 8,
+            DataRate::DR9 => 9,
+            DataRate::DR10 => 10,
+            DataRate::DR11 => 11,
+            DataRate::DR12 => 12,
+            DataRate::DR13 => 13,
+            DataRate::DR14 => 14,
+            DataRate::DR15 => 15,
         }
     }
 }

@@ -1,11 +1,10 @@
     
 use std::{collections::HashMap, fs, io::Write, net::Ipv4Addr, ops::Deref, process::{Command, Stdio}, time::Duration};
 use blockchain_api::BlockchainDeviceConfig;
-use lorawan_device::{configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType, RadioDeviceConfig, TcpDeviceConfig}, communicator::extract_dev_id};
-use lorawan::{device::{Device, DeviceClass, LoRaWANVersion}, regional_parameters::region::{RegionalParameters, Region}, utils::{eui::EUI64, PrettyHexSlice}, encryption::key::Key, physical_parameters::{SpreadingFactor, DataRate}};
+use lorawan_device::configs::{DeviceConfig, DeviceConfigType, RadioDeviceConfig, TcpDeviceConfig};
+use lorawan::{device::{Device, DeviceClass, LoRaWANVersion}, encryption::key::Key, physical_parameters::{CodeRate, DataRate, SpreadingFactor}, regional_parameters::region::{Region, RegionalParameters}, utils::{eui::EUI64, PrettyHexSlice}};
 use serde::{Serialize, Deserialize};
 use serde_json::json;
-use tokio::net::tcp;
 
 #[allow(non_snake_case)]
 #[derive(Serialize)]
@@ -58,7 +57,7 @@ fn create_configs(devices_to_skip: usize, num_devices: usize, devices_per_device
     let mut devices = Vec::new();
 
     let mut index = 0;
-    let colosseum_address: Ipv4Addr = "192.169.40.2".parse().unwrap();
+    let _colosseum_address: Ipv4Addr = "192.169.40.2".parse().unwrap();
 
     let mut i = 0;
     file_content.split('\n').skip(devices_to_skip).take(num_devices * devices_per_device).for_each(|line| {
@@ -69,19 +68,19 @@ fn create_configs(devices_to_skip: usize, num_devices: usize, devices_per_device
         
         let d = Device::new(DeviceClass::A, Some(RegionalParameters::new(Region::EU863_870)), EUI64::from_hex(dev_eui).unwrap(), EUI64::from_hex(join_eui).unwrap(), Key::from_hex(key).unwrap(), Key::from_hex(key).unwrap(), LoRaWANVersion::V1_0_4);
         
-        let r = RadioDeviceConfig {
+        let _r = RadioDeviceConfig {
             region: Region::EU863_870,
             spreading_factor: SpreadingFactor::new(7),
             data_rate: DataRate::new(5),
             rx_gain: 10,
             tx_gain: 20,
-            bandwidth: 125000,
+            bandwidth: 125000.0,
             rx_freq: 990000000.0,
             tx_freq: 1010000000.0,
             sample_rate: 1000000.0,
             rx_chan_id: 0,
             tx_chan_id: 1,
-            dev_id: extract_dev_id(Some(*d.dev_eui()))
+            code_rate: CodeRate::CR4_5,
         };
         commands.push(json!({
             "dev_eui": dev_eui,

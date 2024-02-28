@@ -231,7 +231,7 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
             sender_send,
             receiver_send,
             radio_config,
-            dev_id: config.radio_config.dev_id,
+            dev_id: config.dev_id,
         })
     }
 

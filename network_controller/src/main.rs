@@ -4,7 +4,7 @@ use blockchain_api::exec_bridge::{BlockchainExeConfig, BlockchainExeClient};
 use clap::Parser;
 use lazy_static::lazy_static;
 use lorawan::{
-    physical_parameters::{DataRate, SpreadingFactor},
+    physical_parameters::{CodeRate, DataRate, SpreadingFactor},
     regional_parameters::region::Region,
 };
 use lorawan_device::{
@@ -39,18 +39,19 @@ async fn main() -> Result<(), std::io::Error> {
             data_rate: DataRate::new(5),
             rx_gain: 10,
             tx_gain: 20,
-            bandwidth: 125_000,
+            bandwidth: 125_000.0,
             sample_rate: 1_000_000.0,
             rx_freq: 990_000_000.0,
             tx_freq: 1_010_000_000.0,
             rx_chan_id: 0,
             tx_chan_id: 1,
-            dev_id: 0
+            code_rate: CodeRate::CR4_5
         };
         static ref COLOSSEUM_CONFIG: ColosseumDeviceConfig = ColosseumDeviceConfig {
             address: IpAddr::V4(Ipv4Addr::LOCALHOST),
             radio_config: *RADIO_CONFIG,
             sdr_code: String::from("./src/sdr-lora-merged.py"),
+            dev_id: 0
         };
         static ref BC_CONFIG: BlockchainExeConfig = BlockchainExeConfig {
             orderer_addr: "orderer1.orderers.dlwan.phd:6050".to_string(),
