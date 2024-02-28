@@ -51,14 +51,14 @@ impl Display for SpreadingFactor {
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub enum DataRate {
-    DR0,
-    DR1,
-    DR2,
-    DR3,
-    DR4,
-    DR5,
-    DR6,
-    DR7,
+    DR0,   //SF 12 BW 125
+    DR1,   //SF 11 BW 125
+    DR2,   //SF 10 BW 125
+    DR3,   //SF 9 BW 125
+    DR4,   //SF 8 BW 125
+    DR5,   //SF 7 BW 125
+    DR6,   //SF 6 BW 125
+    DR7,   //FSK 50kbps
     DR8,
     DR9,
     DR10,
