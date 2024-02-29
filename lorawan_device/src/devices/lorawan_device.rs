@@ -23,6 +23,14 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
         }
     }
 
+    pub fn communicator(&self) -> &T {
+        &self.communication
+    }
+    
+    pub fn communicator_mut(&mut self) -> &mut T {
+        &mut self.communication
+    }
+
     fn fold_maccomands(fopts: Option<&[EDMacCommands]>) -> Option<Vec<u8>> {
         fopts.map(|mac_commands| {
             mac_commands.iter()
