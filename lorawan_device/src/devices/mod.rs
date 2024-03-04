@@ -1,5 +1,5 @@
 pub mod lorawan_device;
-pub mod tcp_device;
+//pub mod tcp_device;
 pub mod udp_device;
 pub mod colosseum_device;
 pub mod mock_device;

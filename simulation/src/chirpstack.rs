@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, time::{Duration, Instant, SystemTime}, fs::File, path::Path, process::Command as SyncCommand};
 
-use lorawan_device::{devices::tcp_device::TcpDevice, devices::lorawan_device::LoRaWANDevice, communicator::LoRaWANCommunicator, configs::TcpDeviceConfig};
+use lorawan_device::{communicator::LoRaWANCommunicator, configs::{TcpDeviceConfig, UDPDeviceConfig}, devices::{lorawan_device::LoRaWANDevice, udp_device::UDPDevice}};
 use lorawan::{
     device::{Device, DeviceClass, LoRaWANVersion},
     encryption::key::Key,
@@ -411,7 +411,7 @@ pub async fn main_chirpstack() {
             Key::from_hex(&device.deviceKeys.appKey).unwrap(),
             LoRaWANVersion::V1_0_3,
         );
-        let fd = TcpDevice::create(device, &TcpDeviceConfig {
+        let fd = UDPDevice::create(device, &UDPDeviceConfig {
             addr: "localhost".to_owned(),
             port: 9999,
         }).await;
