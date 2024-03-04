@@ -7,7 +7,7 @@ use crate::{
     utils::{errors::LoRaWANError, eui::EUI64, PrettyHexSlice},
 };
 
-#[derive(Copy, Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Copy, Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct NetworkSessionContext {
     fnwk_s_int_key: Key,
     snwk_s_int_key: Key,
@@ -21,14 +21,14 @@ pub struct NetworkSessionContext {
     rj_count0: u16,
 }
 
-#[derive(Copy, Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Copy, Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct ApplicationSessionContext {
     app_s_key: Key, // -> //TODO questo va nell'application server in realtà
     //f_cnt_up: u32,
     af_cnt_dwn: u32,
 }
 
-#[derive(Copy, Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Copy, Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct JoinSessionContext {
     js_int_key: Key,
     js_enc_key: Key,
@@ -36,7 +36,7 @@ pub struct JoinSessionContext {
     join_nonce: u32,
 }
 
-#[derive(Copy, Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Copy, Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct SessionContext {
     application_context: ApplicationSessionContext,
     network_context: NetworkSessionContext,

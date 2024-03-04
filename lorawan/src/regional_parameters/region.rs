@@ -1,6 +1,6 @@
 use serde::{Serialize, Deserialize};
 
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default, Hash)]
 pub enum Region {
     #[default] EU863_870,
     EU443,
@@ -13,7 +13,7 @@ pub enum Region {
     INDIA865_867,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, Hash)]
 pub struct RegionalParameters {
     region: Region,
 }

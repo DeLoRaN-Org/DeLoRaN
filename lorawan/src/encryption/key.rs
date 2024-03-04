@@ -5,7 +5,7 @@ use serde::{Serialize, Deserialize};
 
 use crate::utils::{errors::LoRaWANError, PrettyHexSlice};
 
-#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Key([u8; 16]);
 
 impl Key {

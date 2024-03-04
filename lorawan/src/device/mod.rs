@@ -13,7 +13,7 @@ use crate::{
 };
 
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default, Hash)]
 pub enum DeviceClass {
     #[default] A,
     B,
@@ -38,7 +38,7 @@ impl DeviceClass {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum LoRaWANVersion {
     V1_0,
     V1_0_1,
@@ -58,13 +58,13 @@ impl LoRaWANVersion {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Hash)]
 pub enum ActivationMode {
     ABP,
     OTAA,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Device {
     class: DeviceClass,
     version: LoRaWANVersion,

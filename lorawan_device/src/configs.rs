@@ -21,14 +21,12 @@ pub struct UDPDeviceConfig {
     pub port: u16
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub struct RadioDeviceConfig {
     pub region: Region,
     pub spreading_factor: SpreadingFactor,
     pub data_rate: DataRate,
     pub code_rate: CodeRate,
-    pub rx_gain: u8,
-    pub tx_gain: u8,
     pub bandwidth: LoRaBandwidth,
     pub rx_freq: f32,
     pub tx_freq: f32,

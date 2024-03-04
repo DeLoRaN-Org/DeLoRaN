@@ -107,7 +107,7 @@ impl<'source> FromPyObject<'source> for LoRaPacket {
 }
 
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Position {
     pub x: f32,
     pub y: f32,
@@ -136,6 +136,7 @@ pub struct Transmission {
     pub spreading_factor: SpreadingFactor,
     pub coding_rate: CodeRate,
     pub starting_power: f32,
+    pub uplink: bool,
 
     pub payload: Vec<u8>,
 }
@@ -198,6 +199,7 @@ impl From<LoRaPacket> for ReceivedTransmission {
                 spreading_factor: SpreadingFactor::new(packet.sf),
                 coding_rate: CodeRate::CR4_5,
                 starting_power: packet.rssi,
+                uplink: false,
                 payload: packet.payload,
             },
             arrival_stats: ArrivalStats {

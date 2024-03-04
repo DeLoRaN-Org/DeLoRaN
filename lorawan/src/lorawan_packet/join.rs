@@ -6,7 +6,7 @@ use crate::utils::{errors::LoRaWANError, eui::EUI64, traits::ToBytes};
 
 
 
-#[derive(Clone, Debug, PartialEq, Eq, Copy, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy, Serialize, Deserialize, Hash)]
 pub enum JoinRequestType {
     JoinRequest,
     RejoinRequest0,

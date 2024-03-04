@@ -3,6 +3,8 @@ use std::fmt::Debug;
 use lorawan::{device::Device, utils::{traits::ToBytes, errors::LoRaWANError}, lorawan_packet::{LoRaWANPacket, payload::Payload, mac_commands::{EDMacCommands, NCMacCommands}}};
 use crate::communicator::{LoRaWANCommunicator, CommunicatorError};
 
+
+#[derive(PartialEq, Eq, Hash)]
 pub struct LoRaWANDevice<T> 
 where T: LoRaWANCommunicator + Send + Sync {
     device: Device,
@@ -52,7 +54,6 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
         let packet = self.device.create_uplink(payload, confirmed, fport, fopts)?;
         self.communication.send_uplink(&packet, Some(*self.dev_eui()),None).await.unwrap();
         if confirmed {
-
             //TODO REMOVE PERFORMANCES CHECKS
             //let before = Instant::now();
             let payloads = self.communication.receive_downlink(Some(Duration::from_secs(5))).await.unwrap();
