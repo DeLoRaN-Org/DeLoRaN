@@ -8,7 +8,7 @@ use lorawan::{
     regional_parameters::region::Region,
 };
 use lorawan_device::{
-    configs::{ColosseumDeviceConfig, RadioDeviceConfig, UDPDeviceConfigNC}, devices::{colosseum_device::ColosseumCommunicator, radio_device::RadioCommunicator}
+    configs::{ColosseumDeviceConfig, RadioDeviceConfig, UDPNCConfig}, devices::{colosseum_device::ColosseumCommunicator, radio_device::RadioCommunicator}
 };
 use network_controller::network_controller::NetworkController;
 
@@ -31,9 +31,9 @@ async fn main() -> Result<(), std::io::Error> {
         //    tcp_dev_port: 9090,
         //    tcp_nc_port: 9091
         //};
-        static ref UDP_CONFIG: UDPDeviceConfigNC = UDPDeviceConfigNC { 
-            listening_addr: "0.0.0.0".to_owned(),
-            listening_port: 9090
+        static ref UDP_CONFIG: UDPNCConfig = UDPNCConfig { 
+            addr: "0.0.0.0".to_owned(),
+            port: 9090
         };
         static ref RADIO_CONFIG: RadioDeviceConfig = RadioDeviceConfig {
             region: Region::EU863_870,

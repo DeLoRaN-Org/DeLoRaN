@@ -1,7 +1,7 @@
     
 use std::{collections::HashMap, fs, io::Write, net::Ipv4Addr, ops::Deref, process::{Command, Stdio}, time::Duration};
 use blockchain_api::BlockchainDeviceConfig;
-use lorawan_device::configs::{DeviceConfig, DeviceConfigType, RadioDeviceConfig, TcpDeviceConfig};
+use lorawan_device::configs::{DeviceConfig, DeviceConfigType, RadioDeviceConfig, TcpDeviceConfig, UDPDeviceConfig};
 use lorawan::{device::{Device, DeviceClass, LoRaWANVersion}, encryption::key::Key, physical_parameters::{CodeRate, DataRate, LoRaBandwidth, SpreadingFactor}, regional_parameters::region::{Region, RegionalParameters}, utils::{eui::EUI64, PrettyHexSlice}};
 use serde::{Serialize, Deserialize};
 use serde_json::json;
@@ -118,14 +118,14 @@ fn create_configs(devices_to_skip: usize, num_devices: usize, devices_per_device
         ];
 
 
-        let tcp_config = TcpDeviceConfig {
+        let udp_config = UDPDeviceConfig {
             addr: addresses[i % addresses.len()].to_string(),
             port: 9090,
         };
 
         let config = DeviceConfig {
             configuration: d,
-            dtype: DeviceConfigType::TCP(tcp_config),
+            dtype: DeviceConfigType::UDP(udp_config),
         };
 
         devices.push(serde_json::to_value(config).unwrap());

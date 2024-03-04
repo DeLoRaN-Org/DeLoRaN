@@ -8,7 +8,7 @@ use std::{
 
 use application_server::application_server::{ApplicationServer, ApplicationServerConfig};
 use clap::Parser;
-use lorawan_device::{configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType, RadioDeviceConfig, UDPDeviceConfigNC}, devices::{colosseum_device::ColosseumCommunicator, radio_device::RadioCommunicator}};
+use lorawan_device::{configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType, RadioDeviceConfig, UDPNCConfig}, devices::{colosseum_device::ColosseumCommunicator, radio_device::RadioCommunicator}};
 use lazy_static::lazy_static;
 use lorawan::{
     device::{
@@ -42,7 +42,7 @@ struct Args {
 pub struct NetworkControllerConfig {
     pub n_id: String,
     pub orderer_address: String,
-    udp_config: Option<UDPDeviceConfigNC>,
+    udp_config: Option<UDPNCConfig>,
     radio_config: Option<RadioDeviceConfig>,
     colosseum_config: Option<ColosseumDeviceConfig>,
 }
@@ -153,9 +153,9 @@ async fn main() -> Result<(), std::io::Error> {
         network_controller: Some(NetworkControllerConfig {
             n_id: "ns_test_1".to_string(),
             orderer_address: "orderer1.orderers.dlwan.phd".to_string(),
-            udp_config: Some(UDPDeviceConfigNC { 
-                listening_addr: "0.0.0.0".to_string(), 
-                listening_port: 9090 
+            udp_config: Some(UDPNCConfig { 
+                addr: "0.0.0.0".to_string(), 
+                port: 9090 
             }),
             radio_config: Some(RadioDeviceConfig {
                 region: Region::EU863_870,

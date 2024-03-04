@@ -108,11 +108,12 @@
             "COLOSSEUM": {
                 "radio_config": {
                     "region": "EU863_870",
-                    "spreading_factor": 7,
-                    "data_rate": 5,
+                    "spreading_factor": "SF7",
+                    "data_rate": "DR5",
+                    "code_rate": "CR4_5",
                     "rx_gain": 10,
                     "tx_gain": 20,
-                    "bandwidth": 125000,
+                    "bandwidth": "BW125",
                     "rx_freq": 990000000,
                     "tx_freq": 1010000000,
                     "sample_rate": 1000000,

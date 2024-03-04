@@ -105,7 +105,7 @@
             "regional_params": null
         },
         "dtype": {
-            "TCP": {
+            "UDP": {
                 "addr": "peer1.org1.dlwan.phd",
                 "port": 9090
             }

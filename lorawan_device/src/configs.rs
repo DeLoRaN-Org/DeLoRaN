@@ -10,9 +10,9 @@ pub struct TcpDeviceConfig {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct UDPDeviceConfigNC {
-    pub listening_addr: String,
-    pub listening_port: u16
+pub struct UDPNCConfig {
+    pub addr: String,
+    pub port: u16
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

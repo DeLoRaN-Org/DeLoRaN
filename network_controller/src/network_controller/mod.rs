@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use blockchain_api::{BlockchainError, BlockchainClient};
 use lorawan::{utils::{increment_nonce, nonce_valid, PrettyHexSlice, traits::ToBytesWithContext, errors::LoRaWANError, eui::EUI64}, device::Device, lorawan_packet::{LoRaWANPacket, join::{JoinAcceptPayload, JoinRequestType}, payload::Payload, mhdr::{MHDR, MType, Major}, mac_payload::MACPayload, fhdr::FHDR, fctrl::{FCtrl, DownlinkFCtrl}, mac_commands}};
-use lorawan_device::{communicator::LoRaWANCommunicator, configs::UDPDeviceConfigNC, devices::debug_device::DebugCommunicator};
+use lorawan_device::{communicator::LoRaWANCommunicator, configs::UDPNCConfig, devices::debug_device::DebugCommunicator};
 use openssl::sha::sha256;
 use serde::{Serialize, Deserialize};
 
@@ -234,7 +234,7 @@ impl NetworkController {
         }
     }
 
-    pub fn udp_routine<BC>(&self, config: &'static UDPDeviceConfigNC, blockchain_config: &BC::Config) -> JoinHandle<()> where BC: BlockchainClient + 'static  {
+    pub fn udp_routine<BC>(&self, config: &'static UDPNCConfig, blockchain_config: &BC::Config) -> JoinHandle<()> where BC: BlockchainClient + 'static  {
         let n_id: &str = self.n_id;
         //let m = self.mpsc_tx.clone();
         let c = blockchain_config.clone();
@@ -244,7 +244,7 @@ impl NetworkController {
             //let nc_addr: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), self.config.tcp_nc_port);
             
             let client: Arc<BC> = Arc::new(*BC::from_config(&c).await.unwrap());
-            let socket = UdpSocket::bind(format!("{}:{}",config.listening_addr, config.listening_port)).await.unwrap();
+            let socket = UdpSocket::bind(format!("{}:{}",config.addr, config.port)).await.unwrap();
 
             let mut buf = Vec::with_capacity(512);
             while let Ok((bytes_read, addr)) = socket.recv_buf_from(&mut buf).await {

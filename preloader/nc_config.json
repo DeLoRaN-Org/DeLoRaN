@@ -2,9 +2,9 @@
     "network_controller": {
         "n_id": "ns_test_1",
         "orderer_address": "orderer1.orderers.dlwan.phd",
-        "tcp_config": {
-            "tcp_dev_port": 9090,
-            "tcp_nc_port": 9091
+        "udp_config": {
+            "addr": "0.0.0.0",
+            "port": 9090
         }
     }
 }

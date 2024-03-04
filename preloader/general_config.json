@@ -1,249 +1,251 @@
 {
     "device": {
-      "configuration": {
-        "class": "A",
-        "version": "V1_1",
-        "activation_mode": "ABP",
-        "dev_nonce": 0,
-        "dev_eui": [
-          80,
-          222,
-          38,
-          70,
-          249,
-          167,
-          172,
-          142
-        ],
-        "join_eui": [
-          220,
-          188,
-          101,
-          246,
-          7,
-          164,
-          125,
-          234
-        ],
-        "nwk_key": [
-          187,
-          243,
-          38,
-          190,
-          154,
-          192,
-          81,
-          69,
-          58,
-          166,
-          22,
-          65,
-          15,
-          17,
-          14,
-          231
-        ],
-        "app_key": [
-          187,
-          243,
-          38,
-          190,
-          154,
-          192,
-          81,
-          69,
-          58,
-          166,
-          22,
-          65,
-          15,
-          17,
-          14,
-          231
-        ],
-        "join_context": {
-          "js_int_key": [
-            144,
-            252,
-            177,
-            15,
-            204,
-            240,
-            30,
-            76,
-            213,
-            39,
-            31,
-            188,
-            116,
-            124,
-            202,
-            145
-          ],
-          "js_enc_key": [
-            206,
-            180,
-            94,
-            39,
-            112,
-            97,
-            178,
-            143,
-            15,
-            255,
-            152,
-            142,
-            21,
-            148,
-            97,
-            25
-          ],
-          "rj_count1": 0,
-          "join_nonce": 0
+        "configuration": {
+            "class": "A",
+            "version": "V1_1",
+            "activation_mode": "ABP",
+            "dev_nonce": 0,
+            "dev_eui": [
+                80,
+                222,
+                38,
+                70,
+                249,
+                167,
+                172,
+                142
+            ],
+            "join_eui": [
+                220,
+                188,
+                101,
+                246,
+                7,
+                164,
+                125,
+                234
+            ],
+            "nwk_key": [
+                187,
+                243,
+                38,
+                190,
+                154,
+                192,
+                81,
+                69,
+                58,
+                166,
+                22,
+                65,
+                15,
+                17,
+                14,
+                231
+            ],
+            "app_key": [
+                187,
+                243,
+                38,
+                190,
+                154,
+                192,
+                81,
+                69,
+                58,
+                166,
+                22,
+                65,
+                15,
+                17,
+                14,
+                231
+            ],
+            "join_context": {
+                "js_int_key": [
+                    144,
+                    252,
+                    177,
+                    15,
+                    204,
+                    240,
+                    30,
+                    76,
+                    213,
+                    39,
+                    31,
+                    188,
+                    116,
+                    124,
+                    202,
+                    145
+                ],
+                "js_enc_key": [
+                    206,
+                    180,
+                    94,
+                    39,
+                    112,
+                    97,
+                    178,
+                    143,
+                    15,
+                    255,
+                    152,
+                    142,
+                    21,
+                    148,
+                    97,
+                    25
+                ],
+                "rj_count1": 0,
+                "join_nonce": 0
+            },
+            "session": {
+                "application_context": {
+                    "app_s_key": [
+                        85,
+                        96,
+                        204,
+                        11,
+                        13,
+                        195,
+                        123,
+                        235,
+                        191,
+                        179,
+                        154,
+                        205,
+                        51,
+                        125,
+                        211,
+                        77
+                    ],
+                    "af_cnt_dwn": 0
+                },
+                "network_context": {
+                    "fnwk_s_int_key": [
+                        117,
+                        195,
+                        235,
+                        139,
+                        167,
+                        60,
+                        154,
+                        13,
+                        95,
+                        116,
+                        187,
+                        62,
+                        2,
+                        231,
+                        239,
+                        158
+                    ],
+                    "snwk_s_int_key": [
+                        117,
+                        195,
+                        235,
+                        139,
+                        167,
+                        60,
+                        154,
+                        13,
+                        95,
+                        116,
+                        187,
+                        62,
+                        2,
+                        231,
+                        239,
+                        158
+                    ],
+                    "nwk_s_enc_key": [
+                        117,
+                        195,
+                        235,
+                        139,
+                        167,
+                        60,
+                        154,
+                        13,
+                        95,
+                        116,
+                        187,
+                        62,
+                        2,
+                        231,
+                        239,
+                        158
+                    ],
+                    "home_net_id": [
+                        96,
+                        0,
+                        8
+                    ],
+                    "dev_addr": [
+                        224,
+                        17,
+                        59,
+                        42
+                    ],
+                    "f_cnt_up": 0,
+                    "nf_cnt_dwn": 1,
+                    "rj_count0": 0
+                }
+            },
+            "last_join_request_received": "JoinRequest",
+            "regional_params": null
         },
-        "session": {
-          "application_context": {
-            "app_s_key": [
-              85,
-              96,
-              204,
-              11,
-              13,
-              195,
-              123,
-              235,
-              191,
-              179,
-              154,
-              205,
-              51,
-              125,
-              211,
-              77
-            ],
-            "af_cnt_dwn": 0
-          },
-          "network_context": {
-            "fnwk_s_int_key": [
-              117,
-              195,
-              235,
-              139,
-              167,
-              60,
-              154,
-              13,
-              95,
-              116,
-              187,
-              62,
-              2,
-              231,
-              239,
-              158
-            ],
-            "snwk_s_int_key": [
-              117,
-              195,
-              235,
-              139,
-              167,
-              60,
-              154,
-              13,
-              95,
-              116,
-              187,
-              62,
-              2,
-              231,
-              239,
-              158
-            ],
-            "nwk_s_enc_key": [
-              117,
-              195,
-              235,
-              139,
-              167,
-              60,
-              154,
-              13,
-              95,
-              116,
-              187,
-              62,
-              2,
-              231,
-              239,
-              158
-            ],
-            "home_net_id": [
-              96,
-              0,
-              8
-            ],
-            "dev_addr": [
-              224,
-              17,
-              59,
-              42
-            ],
-            "f_cnt_up": 0,
-            "nf_cnt_dwn": 1,
-            "rj_count0": 0
-          }
-        },
-        "last_join_request_received": "JoinRequest",
-        "regional_params": null
-      },
-      "dtype": {
-        "TCP": {
-          "addr": "127.0.0.1",
-          "port": 9090
+        "dtype": {
+            "UDP": {
+                "addr": "127.0.0.1",
+                "port": 9090
+            }
         }
-      }
     },
     "network_controller": {
-      "n_id": "ns_test_1",
-      "tcp_config": {
-        "tcp_dev_port": 9090,
-        "tcp_nc_port": 9091
-      },
-      "radio_config": {
-        "region": "EU863_870",
-        "spreading_factor": 7,
-        "data_rate": 5,
-        "rx_gain": 10,
-        "tx_gain": 20,
-        "bandwidth": 125000,
-        "rx_freq": 990000000,
-        "tx_freq": 1010000000,
-        "sample_rate": 1000000,
-        "rx_chan_id": 0,
-        "tx_chan_id": 1,
-        "dev_id": 1001
-      },
-      "colosseum_config": {
-        "radio_config": {
-          "region": "EU863_870",
-          "spreading_factor": 7,
-          "data_rate": 5,
-          "rx_gain": 10,
-          "tx_gain": 20,
-          "bandwidth": 125000,
-          "rx_freq": 990000000,
-          "tx_freq": 1010000000,
-          "sample_rate": 1000000,
-          "rx_chan_id": 0,
-          "tx_chan_id": 1,
-          "dev_id": 1001
+        "n_id": "ns_test_1",
+        "udp_config": {
+            "addr": "0.0.0.0",
+            "port": 9090
         },
-        "address": "192.168.40.2",
-        "sdr_code": "./src/sdr-lora-merged.py"
-      }
+        "radio_config": {
+            "region": "EU863_870",
+            "spreading_factor": "SF7",
+            "data_rate": "DR5",
+            "code_rate": "CR4_5",
+            "rx_gain": 10,
+            "tx_gain": 20,
+            "bandwidth": "BW125",
+            "rx_freq": 990000000,
+            "tx_freq": 1010000000,
+            "sample_rate": 1000000,
+            "rx_chan_id": 0,
+            "tx_chan_id": 1,
+            "dev_id": 1001
+        },
+        "colosseum_config": {
+            "radio_config": {
+                "region": "EU863_870",
+                "spreading_factor": "SF7",
+                "data_rate": "DR5",
+                "code_rate": "CR4_5",
+                "rx_gain": 10,
+                "tx_gain": 20,
+                "bandwidth": "BW125",
+                "rx_freq": 990000000,
+                "tx_freq": 1010000000,
+                "sample_rate": 1000000,
+                "rx_chan_id": 0,
+                "tx_chan_id": 1,
+                "dev_id": 1001
+            },
+            "address": "192.168.40.2",
+            "sdr_code": "./src/sdr-lora-merged.py"
+        }
     },
     "application_server": {
-      "tcp_receive_port": 5050
+        "tcp_receive_port": 5050
     }
-  }
+}

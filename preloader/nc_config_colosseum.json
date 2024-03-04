@@ -3,21 +3,22 @@
         "n_id": "ns_test_1",
         "colosseum_config": {
             "radio_config": {
-              "region": "EU863_870",
-              "spreading_factor": 7,
-              "data_rate": 5,
-              "rx_gain": 10,
-              "tx_gain": 20,
-              "bandwidth": 125000,
-              "rx_freq": 1010000000,
-              "tx_freq": 990000000,
-              "sample_rate": 1000000,
-              "rx_chan_id": 0,
-              "tx_chan_id": 1,
-              "dev_id": 0
+                "region": "EU863_870",
+                "spreading_factor": "SF7",
+                "data_rate": "DR5",
+                "rx_gain": 10,
+                "tx_gain": 20,
+                "bandwidth": "BW125",
+                "code_rate": "CR4_5",
+                "rx_freq": 1010000000,
+                "tx_freq": 990000000,
+                "sample_rate": 1000000,
+                "rx_chan_id": 0,
+                "tx_chan_id": 1,
+                "dev_id": 0
             },
             "address": "192.168.40.2",
             "sdr_code": "./src/sdr-lora-merged.py"
-          }
+        }
     }
 }
