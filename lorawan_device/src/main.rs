@@ -2,7 +2,7 @@
 use std::{collections::HashMap, fs, io::Write, net::Ipv4Addr, ops::Deref, process::{Command, Stdio}, time::Duration};
 use blockchain_api::BlockchainDeviceConfig;
 use lorawan_device::configs::{DeviceConfig, DeviceConfigType, RadioDeviceConfig, TcpDeviceConfig};
-use lorawan::{device::{Device, DeviceClass, LoRaWANVersion}, encryption::key::Key, physical_parameters::{CodeRate, DataRate, SpreadingFactor}, regional_parameters::region::{Region, RegionalParameters}, utils::{eui::EUI64, PrettyHexSlice}};
+use lorawan::{device::{Device, DeviceClass, LoRaWANVersion}, encryption::key::Key, physical_parameters::{CodeRate, DataRate, LoRaBandwidth, SpreadingFactor}, regional_parameters::region::{Region, RegionalParameters}, utils::{eui::EUI64, PrettyHexSlice}};
 use serde::{Serialize, Deserialize};
 use serde_json::json;
 
@@ -70,11 +70,11 @@ fn create_configs(devices_to_skip: usize, num_devices: usize, devices_per_device
         
         let _r = RadioDeviceConfig {
             region: Region::EU863_870,
-            spreading_factor: SpreadingFactor::new(7),
-            data_rate: DataRate::new(5),
+            spreading_factor: SpreadingFactor::SF7,
+            data_rate: DataRate::DR5,
             rx_gain: 10,
             tx_gain: 20,
-            bandwidth: 125000.0,
+            bandwidth: LoRaBandwidth::BW125,
             rx_freq: 990000000.0,
             tx_freq: 1010000000.0,
             sample_rate: 1000000.0,
@@ -193,7 +193,6 @@ async fn main() {
     let devices_per_device = 10000;
     create_configs(0, 1, devices_per_device);
     //send_commands(&nc_endpoint, devices_per_device);
-    Ok::<(), ()>(()).or(Err::<(), ()>(())).unwrap(); //last line is a hack to make the compiler happy
 }
 
 

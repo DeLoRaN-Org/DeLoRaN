@@ -8,7 +8,7 @@ use std::{
 
 use application_server::application_server::{ApplicationServer, ApplicationServerConfig};
 use clap::Parser;
-use lorawan_device::{configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType, RadioDeviceConfig}, devices::colosseum_device::ColosseumCommunicator, devices::radio_device::RadioCommunicator};
+use lorawan_device::{configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType, RadioDeviceConfig, UDPDeviceConfigNC}, devices::{colosseum_device::ColosseumCommunicator, radio_device::RadioCommunicator}};
 use lazy_static::lazy_static;
 use lorawan::{
     device::{
@@ -16,11 +16,11 @@ use lorawan::{
         Device, DeviceClass, LoRaWANVersion,
     },
     encryption::key::Key,
-    physical_parameters::{CodeRate, DataRate, SpreadingFactor},
+    physical_parameters::{CodeRate, DataRate, LoRaBandwidth, SpreadingFactor},
     regional_parameters::region::Region,
     utils::eui::EUI64,
 };
-use network_controller::network_controller::{NetworkController, NetworkControllerTCPConfig};
+use network_controller::network_controller::NetworkController;
 use serde::{Deserialize, Serialize};
 use blockchain_api::exec_bridge::{BlockchainExeConfig, BlockchainExeClient};
 
@@ -42,7 +42,7 @@ struct Args {
 pub struct NetworkControllerConfig {
     pub n_id: String,
     pub orderer_address: String,
-    tcp_config: Option<NetworkControllerTCPConfig>,
+    udp_config: Option<UDPDeviceConfigNC>,
     radio_config: Option<RadioDeviceConfig>,
     colosseum_config: Option<ColosseumDeviceConfig>,
 }
@@ -95,7 +95,8 @@ async fn network_controller_main(config: &'static NetworkControllerConfig) {
 
     let t1 = config.colosseum_config.as_ref().map(|colosseum_config| nc.routine::<ColosseumCommunicator, BlockchainExeClient>(colosseum_config, &BC_CONFIG));
     let t2 = config.radio_config.as_ref().map(|radio_config| nc.routine::<RadioCommunicator, BlockchainExeClient>(radio_config, &BC_CONFIG));
-    let t3 = config.tcp_config.as_ref().map(|tcp_config| nc.tcp_routine::<BlockchainExeClient>(tcp_config, &BC_CONFIG));
+    //let t3 = config.tcp_config.as_ref().map(|tcp_config| nc.tcp_routine::<BlockchainExeClient>(tcp_config, &BC_CONFIG));
+    let t3 = config.udp_config.as_ref().map(|udp_config| nc.udp_routine::<BlockchainExeClient>(udp_config, &BC_CONFIG));
 
     if let Some(t) = t1 { t.await.unwrap(); }
     if let Some(t) = t2 { t.await.unwrap(); }
@@ -152,17 +153,17 @@ async fn main() -> Result<(), std::io::Error> {
         network_controller: Some(NetworkControllerConfig {
             n_id: "ns_test_1".to_string(),
             orderer_address: "orderer1.orderers.dlwan.phd".to_string(),
-            tcp_config: Some(NetworkControllerTCPConfig {
-                tcp_dev_port: 9090,
-                tcp_nc_port: 9091,
+            udp_config: Some(UDPDeviceConfigNC { 
+                listening_addr: "0.0.0.0".to_string(), 
+                listening_port: 9090 
             }),
             radio_config: Some(RadioDeviceConfig {
                 region: Region::EU863_870,
-                spreading_factor: SpreadingFactor::new(7),
-                data_rate: DataRate::new(5),
+                spreading_factor: SpreadingFactor::SF7,
+                data_rate: DataRate::DR5,
                 rx_gain: 10,
                 tx_gain: 20,
-                bandwidth: 125_000.0,
+                bandwidth: LoRaBandwidth::BW125,
                 sample_rate: 1_000_000.0,
                 rx_freq: 990_000_000.0,
                 tx_freq: 1_010_000_000.0,
@@ -173,11 +174,11 @@ async fn main() -> Result<(), std::io::Error> {
             colosseum_config: Some(ColosseumDeviceConfig {
                 radio_config: RadioDeviceConfig {
                     region: Region::EU863_870,
-                    spreading_factor: SpreadingFactor::new(7),
-                    data_rate: DataRate::new(5),
+                    spreading_factor: SpreadingFactor::SF7,
+                    data_rate: DataRate::DR5,
                     rx_gain: 10,
                     tx_gain: 20,
-                    bandwidth: 125_000.0,
+                    bandwidth: LoRaBandwidth::BW125,
                     sample_rate: 1_000_000.0,
                     rx_freq: 990_000_000.0,
                     tx_freq: 1_010_000_000.0,

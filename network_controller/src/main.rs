@@ -4,15 +4,13 @@ use blockchain_api::exec_bridge::{BlockchainExeConfig, BlockchainExeClient};
 use clap::Parser;
 use lazy_static::lazy_static;
 use lorawan::{
-    physical_parameters::{CodeRate, DataRate, SpreadingFactor},
+    physical_parameters::{CodeRate, DataRate, LoRaBandwidth, SpreadingFactor},
     regional_parameters::region::Region,
 };
 use lorawan_device::{
-    devices::colosseum_device::ColosseumCommunicator,
-    configs::{ColosseumDeviceConfig, RadioDeviceConfig},
-    devices::radio_device::RadioCommunicator,
+    configs::{ColosseumDeviceConfig, RadioDeviceConfig, UDPDeviceConfigNC}, devices::{colosseum_device::ColosseumCommunicator, radio_device::RadioCommunicator}
 };
-use network_controller::network_controller::{NetworkController, NetworkControllerTCPConfig};
+use network_controller::network_controller::NetworkController;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -29,17 +27,21 @@ async fn main() -> Result<(), std::io::Error> {
 
     lazy_static! {
         static ref N_ID: String = String::from("nc_test_1");
-        static ref TCP_CONFIG: NetworkControllerTCPConfig = NetworkControllerTCPConfig {
-            tcp_dev_port: 9090,
-            tcp_nc_port: 9091
+        //static ref TCP_CONFIG: NetworkControllerTCPConfig = NetworkControllerTCPConfig {
+        //    tcp_dev_port: 9090,
+        //    tcp_nc_port: 9091
+        //};
+        static ref UDP_CONFIG: UDPDeviceConfigNC = UDPDeviceConfigNC { 
+            listening_addr: "0.0.0.0".to_owned(),
+            listening_port: 9090
         };
         static ref RADIO_CONFIG: RadioDeviceConfig = RadioDeviceConfig {
             region: Region::EU863_870,
-            spreading_factor: SpreadingFactor::new(7),
-            data_rate: DataRate::new(5),
+            spreading_factor: SpreadingFactor::SF7,
+            data_rate: DataRate::DR5,
             rx_gain: 10,
             tx_gain: 20,
-            bandwidth: 125_000.0,
+            bandwidth: LoRaBandwidth::BW125,
             sample_rate: 1_000_000.0,
             rx_freq: 990_000_000.0,
             tx_freq: 1_010_000_000.0,
@@ -66,7 +68,7 @@ async fn main() -> Result<(), std::io::Error> {
         &COLOSSEUM_CONFIG,
         &BC_CONFIG,
     );
-    let tcp_routine = nc.tcp_routine::<BlockchainExeClient>(&TCP_CONFIG, &BC_CONFIG);
+    let tcp_routine = nc.udp_routine::<BlockchainExeClient>(&UDP_CONFIG, &BC_CONFIG);
     let radio_routine = nc.routine::<RadioCommunicator, BlockchainExeClient>(&RADIO_CONFIG, &BC_CONFIG);
 
     colosseum_routine.await.unwrap();

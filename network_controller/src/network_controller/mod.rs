@@ -1,12 +1,12 @@
-use std::{net::{Ipv4Addr, SocketAddr, IpAddr}, sync::Arc};
+use std::sync::Arc;
 
 use blockchain_api::{BlockchainError, BlockchainClient};
 use lorawan::{utils::{increment_nonce, nonce_valid, PrettyHexSlice, traits::ToBytesWithContext, errors::LoRaWANError, eui::EUI64}, device::Device, lorawan_packet::{LoRaWANPacket, join::{JoinAcceptPayload, JoinRequestType}, payload::Payload, mhdr::{MHDR, MType, Major}, mac_payload::MACPayload, fhdr::FHDR, fctrl::{FCtrl, DownlinkFCtrl}, mac_commands}};
-use lorawan_device::{communicator::LoRaWANCommunicator, devices::debug_device::DebugCommunicator};
+use lorawan_device::{communicator::LoRaWANCommunicator, configs::UDPDeviceConfigNC, devices::debug_device::DebugCommunicator};
 use openssl::sha::sha256;
 use serde::{Serialize, Deserialize};
 
-use tokio::{net::{TcpListener, TcpStream}, io::{AsyncReadExt, AsyncWriteExt}, task::JoinHandle};
+use tokio::{net::UdpSocket, task::JoinHandle};
 use crate::utils::error::NCError;
 
 #[derive(Clone)]
@@ -14,10 +14,17 @@ pub struct NetworkController {
     pub n_id: &'static str,
 }
 
+//#[derive(Clone, Serialize, Deserialize)]
+//#[deprecated(note="Use NetworkControllerUDPConfig instead")]
+//pub struct NetworkControllerTCPConfig {
+//    pub tcp_dev_port: u16,
+//    pub tcp_nc_port: u16,
+//}
+
 #[derive(Clone, Serialize, Deserialize)]
-pub struct NetworkControllerTCPConfig {
-    pub tcp_dev_port: u16,
-    pub tcp_nc_port: u16,
+pub struct NetworkControllerUDPConfig {
+    pub udp_dev_port: u16,
+    pub udp_nc_port: u16,
 }
 
 impl NetworkController {
@@ -180,34 +187,6 @@ impl NetworkController {
         }
     }
 
-    async fn handle_tcp_connection(mut cl_sock: TcpStream, n_id: &'static str,  bc_client: Arc<impl BlockchainClient>) {
-        let mut buf = vec![0_u8; 1024];
-        while let Ok(bytes_read) = cl_sock.read(&mut buf).await {
-            //println!("read {} bytes: {}", bytes_read, PrettyHexSlice(&buf[..bytes_read]));
-            if bytes_read == 0 {break}
-            let mhdr: MHDR = MHDR::from_bytes(buf[0]);
-            let answer = Self::dispatch_task(&mhdr, &buf[..bytes_read], &bc_client).await;
-            //println!("created answer");
-            match answer {
-                Ok(ans) => {
-                    if let Some((in_answer, _)) = &ans {
-                        cl_sock.write_all(in_answer).await.unwrap();
-                    }
-                    match bc_client.create_uplink(&buf[..bytes_read], (ans.map(|v| v.0)).as_deref(), n_id).await {
-                        Ok(_) =>  {
-                            println!("uplink created successfully");
-                        }, 
-                        Err(e) => {
-                            eprintln!("Error creating uplink with answer: {e:?}")
-                        },
-                    };
-                },
-                Err(e) => eprintln!("{e:?}"),
-            }
-        }
-        println!("task ended");
-    }
-
     async fn communicator_routine<LC,BC>(config: &'static LC::Config, n_id: &'static str, blockchain_config: &BC::Config) 
     where LC: LoRaWANCommunicator + Sync + Send + 'static, 
           BC: BlockchainClient + 'static { //TODO too many statics? maybe not
@@ -216,35 +195,36 @@ impl NetworkController {
         let communicator = Arc::new(DebugCommunicator::from(LC::from_config(config).await.unwrap(), None));
         loop {
             match communicator.receive_downlink(None).await {
-                Ok(mut content) => {
-                    let (sf, packet) = content.drain().next().unwrap(); //TODO analyze all packets instead of just one from sf 7
-                    if !packet.payload.is_empty() {
-                        println!("Received {} at sf {}",PrettyHexSlice(&packet.payload), sf);
-                        let mhdr = MHDR::from_bytes(packet.payload[0]);
-
-                        let client_clone = Arc::clone(&client);
-                        let radio_clone = Arc::clone(&communicator);
-
-                        tokio::spawn(async move {
-                            let answer = Self::dispatch_task(&mhdr, &packet.payload, &client_clone).await;
-                            match answer {
-                                Ok(ans) => {
-                                    if let Some((in_answer, dest)) = &ans {
-                                        radio_clone.send_uplink(in_answer, None, Some(*dest)).await.unwrap();
-                                    }
-                                    match client_clone.create_uplink(&packet.payload, (ans.map(|v| v.0)).as_deref(), n_id).await {
-                                        Ok(_) =>  {
-                                            println!("uplink created successfully");
-                                        }, 
-                                        Err(e) => {
-                                            eprintln!("Error creating uplink with answer: {e:?}")
-                                        },
-                                    };
-                                },
-                                Err(e) => eprintln!("Packet {}: {e:?}", PrettyHexSlice(&packet.payload)),
-                            }
-                        });
-                    };
+                Ok(content) => {
+                    for packet in content {
+                        if !packet.transmission.payload.is_empty() {
+                            println!("Received {} at sf {}",PrettyHexSlice(&packet.transmission.payload), packet.transmission.spreading_factor);
+                            let mhdr = MHDR::from_bytes(packet.transmission.payload[0]);
+    
+                            let client_clone = Arc::clone(&client);
+                            let radio_clone = Arc::clone(&communicator);
+    
+                            tokio::spawn(async move {
+                                let answer = Self::dispatch_task(&mhdr, &packet.transmission.payload, &client_clone).await;
+                                match answer {
+                                    Ok(ans) => {
+                                        if let Some((in_answer, dest)) = &ans {
+                                            radio_clone.send_uplink(in_answer, None, Some(*dest)).await.unwrap();
+                                        }
+                                        match client_clone.create_uplink(&packet.transmission.payload, (ans.map(|v| v.0)).as_deref(), n_id).await {
+                                            Ok(_) =>  {
+                                                println!("uplink created successfully");
+                                            }, 
+                                            Err(e) => {
+                                                eprintln!("Error creating uplink with answer: {e:?}")
+                                            },
+                                        };
+                                    },
+                                    Err(e) => eprintln!("Packet {}: {e:?}", PrettyHexSlice(&packet.transmission.payload)),
+                                }
+                            });
+                        };
+                    }
                 },
                 Err(e) => {
                     eprintln!("Error receiving downlink: {e:?}");
@@ -254,25 +234,43 @@ impl NetworkController {
         }
     }
 
-    pub fn tcp_routine<BC>(&self, config: &NetworkControllerTCPConfig, blockchain_config: &BC::Config) -> JoinHandle<()> where BC: BlockchainClient + 'static  {
+    pub fn udp_routine<BC>(&self, config: &'static UDPDeviceConfigNC, blockchain_config: &BC::Config) -> JoinHandle<()> where BC: BlockchainClient + 'static  {
         let n_id: &str = self.n_id;
         //let m = self.mpsc_tx.clone();
         let c = blockchain_config.clone();
-        let tcp_dev_port = config.tcp_dev_port;
-        
+
         tokio::spawn( async move {
             //TODO implement nc communications 
             //let nc_addr: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), self.config.tcp_nc_port);
             
             let client: Arc<BC> = Arc::new(*BC::from_config(&c).await.unwrap());
-            let dev_addr: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), tcp_dev_port);
-            let dev_socket = TcpListener::bind(dev_addr).await.unwrap();
-            //println!("Waiting for connections...");
-            while let Ok((cl_sock, _addr)) = dev_socket.accept().await {
+            let socket = UdpSocket::bind(format!("{}:{}",config.listening_addr, config.listening_port)).await.unwrap();
+
+            let mut buf = Vec::with_capacity(512);
+            while let Ok((bytes_read, addr)) = socket.recv_buf_from(&mut buf).await {
                 //let mm = m.clone();
                 let c = Arc::clone(&client);
+                let data = buf[..bytes_read].to_vec();
                 tokio::spawn(async move {
-                    Self::handle_tcp_connection(cl_sock, n_id, c).await
+                    let mhdr = MHDR::from_bytes(data[0]);
+                    let answer = Self::dispatch_task(&mhdr, &data, &c).await;
+                    match answer {
+                        Ok(ans) => {
+                            if let Some((in_answer, _)) = &ans {
+                                let s = UdpSocket::bind("0.0.0.0:0").await.unwrap();
+                                s.send_to(in_answer, addr).await.unwrap();
+                            }
+                            match c.create_uplink(&data, (ans.map(|v| v.0)).as_deref(), n_id).await {
+                                Ok(_) =>  {
+                                    println!("uplink created successfully");
+                                }, 
+                                Err(e) => {
+                                    eprintln!("Error creating uplink with answer: {e:?}")
+                                },
+                            };
+                        },
+                        Err(e) => eprintln!("Packet {}: {e:?}", PrettyHexSlice(&data)),
+                    };
                 });
             };
         })

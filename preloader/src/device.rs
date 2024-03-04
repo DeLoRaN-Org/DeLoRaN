@@ -2,13 +2,7 @@ use core::panic;
 use std::{time::{Duration, Instant, SystemTime}, fs::OpenOptions};
 
 use lorawan_device::{
-    devices::colosseum_device::{ColosseumCommunicator, ColosseumDevice},
-    communicator::LoRaWANCommunicator,
-    configs::{DeviceConfig, DeviceConfigType},
-    devices::debug_device::DebugDevice,
-    devices::lorawan_device::LoRaWANDevice,
-    devices::radio_device::RadioDevice,
-    devices::tcp_device::TcpDevice,
+    communicator::LoRaWANCommunicator, configs::{DeviceConfig, DeviceConfigType}, devices::{colosseum_device::{ColosseumCommunicator, ColosseumDevice}, debug_device::DebugDevice, lorawan_device::LoRaWANDevice, radio_device::RadioDevice, udp_device::UDPDevice}
 };
 use tokio::time::sleep;
 use std::io::Write;
@@ -101,9 +95,9 @@ pub async fn device_main(configs: Vec<&'static DeviceConfig>) {
 
     for (i, config) in configs[SKIP_DEVICES..(SKIP_DEVICES + num_devices)].iter().enumerate() {
         match &config.dtype {
-            DeviceConfigType::TCP(c) => {
+            DeviceConfigType::UDP(c) => {
                 handlers.push(tokio::spawn(async {
-                    DebugDevice::from(TcpDevice::create(config.configuration, c).await)
+                    DebugDevice::from(UDPDevice::create(config.configuration, c).await)
                         .run()
                         .await;
                 }));

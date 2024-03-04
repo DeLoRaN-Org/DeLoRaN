@@ -1,8 +1,8 @@
-use std::{collections::HashMap, time::Duration};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use blockchain_api::{exec_bridge::BlockchainExeClient, BlockchainClient};
-use lorawan::{device::Device, physical_parameters::SpreadingFactor, utils::eui::EUI64};
+use lorawan::{device::Device, utils::eui::EUI64};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -12,11 +12,13 @@ use tokio::{
 use lorawan::utils::errors::LoRaWANError;
 
 use crate::{
-    communicator::{CommunicatorError, LoRaPacket, LoRaWANCommunicator},
+    communicator::{CommunicatorError, LoRaWANCommunicator, ReceivedTransmission, Transmission},
     configs::TcpDeviceConfig,
     devices::lorawan_device::LoRaWANDevice,
 };
 
+
+#[deprecated(note="Use lorawan_device::devices::udp_device::UdpDevice instead")]
 pub struct TcpDevice;
 impl TcpDevice {
     pub async fn create(
@@ -57,6 +59,7 @@ impl TcpDevice {
     }
 }
 
+#[deprecated(note="Use lorawan_device::devices::udp_device::UdpCommunicator instead")]
 pub struct TCPCommunicator {
     stream: Mutex<TcpStream>,
 }
@@ -95,7 +98,7 @@ impl LoRaWANCommunicator for TCPCommunicator {
     async fn receive_downlink(
         &self,
         timeout: Option<Duration>,
-    ) -> Result<HashMap<SpreadingFactor, LoRaPacket>, CommunicatorError> {
+    ) -> Result<Vec<ReceivedTransmission>, CommunicatorError> {
         let mut buf = Vec::with_capacity(256);
         let mut stream = self.stream.lock().await;
         match timeout {
@@ -114,10 +117,13 @@ impl LoRaWANCommunicator for TCPCommunicator {
             }
         }
 
-        let packet = LoRaPacket {
-            payload: buf,
+        let packet = ReceivedTransmission {
+            transmission: Transmission {
+                payload: buf,
+                ..Default::default()
+            },
             ..Default::default()
         };
-        Ok(HashMap::from([(SpreadingFactor::new(7), packet)]))
+        Ok(vec![packet])
     }
 }

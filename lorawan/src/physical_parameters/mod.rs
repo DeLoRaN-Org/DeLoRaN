@@ -4,10 +4,59 @@ use serde::{Deserialize, Serialize};
 
 use crate::regional_parameters::region::Region;
 
-#[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Default)]
+pub enum LoRaBandwidth {
+    #[default]
+    BW125,
+    BW250,
+    BW500,
+}
+
+impl From<f32> for LoRaBandwidth {
+    fn from(bw: f32) -> Self {
+        let u32_bw = bw as u32;
+
+        if u32_bw < 1000 {
+            match u32_bw {
+                125 => LoRaBandwidth::BW125,
+                250 => LoRaBandwidth::BW250,
+                500 => LoRaBandwidth::BW500,
+                _ => LoRaBandwidth::BW125,
+            }
+        } else {
+            match u32_bw {
+                125_000 => LoRaBandwidth::BW125,
+                250_000 => LoRaBandwidth::BW250,
+                500_000 => LoRaBandwidth::BW500,
+                _ => LoRaBandwidth::BW125,
+            }
+        }
+    }
+}
+
+impl LoRaBandwidth {
+    pub fn hz(&self) -> f32 {
+        match self {
+            LoRaBandwidth::BW125 => 125_000.0,
+            LoRaBandwidth::BW250 => 250_000.0,
+            LoRaBandwidth::BW500 => 500_000.0,
+        }
+    }
+    
+    pub fn khz(&self) -> f32 {
+        match self {
+            LoRaBandwidth::BW125 => 125.0,
+            LoRaBandwidth::BW250 => 250.0,
+            LoRaBandwidth::BW500 => 500.0,
+        }
+    }
+}
 
 
+
+#[derive(Copy, Clone, Serialize, Deserialize, Debug, PartialEq, Eq, Hash, Default)]
 pub enum SpreadingFactor {
+    #[default]
     SF7,
     SF8,
     SF9,
@@ -114,8 +163,9 @@ impl DataRate {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum CodeRate {
+    #[default]
     CR4_5,
     CR4_6,
     CR5_7,

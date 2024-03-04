@@ -1,9 +1,9 @@
-use std::{collections::HashMap, time::Duration};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use blockchain_api::{exec_bridge::BlockchainExeClient, BlockchainClient};
-use lorawan::{device::Device, utils::eui::EUI64, physical_parameters::SpreadingFactor};
-use crate::{communicator::{LoRaWANCommunicator, CommunicatorError, LoRaPacket}, devices::lorawan_device::LoRaWANDevice, configs::MockDeviceConfig};
+use lorawan::{device::Device, utils::eui::EUI64};
+use crate::{communicator::{CommunicatorError, LoRaWANCommunicator, ReceivedTransmission, Transmission}, configs::MockDeviceConfig, devices::lorawan_device::LoRaWANDevice};
 
 pub struct MockDevice;
 impl MockDevice {
@@ -43,10 +43,13 @@ impl LoRaWANCommunicator for MockCommunicator {
     async fn receive_downlink(
         &self,
         _timeout: Option<Duration>,
-    ) -> Result<HashMap<SpreadingFactor, LoRaPacket>, CommunicatorError> {
-        Ok(HashMap::from([(SpreadingFactor::new(7), LoRaPacket {
-            payload: Vec::from([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18]),
-            ..Default::default()
-        })]))
+    ) -> Result<Vec<ReceivedTransmission>, CommunicatorError> {
+        Ok(vec![ReceivedTransmission { 
+            transmission: Transmission {
+                payload: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                ..Default::default()
+            }, 
+            arrival_stats: Default::default()
+        }])
     }  
 }

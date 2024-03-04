@@ -1,14 +1,14 @@
-use std::collections::HashMap;
+
 use std::ops::{Deref, DerefMut};
 use std::fmt::Debug;
 use std::time::Duration;
 use async_trait::async_trait;
 use blockchain_api::BlockchainClient;
 use blockchain_api::exec_bridge::BlockchainExeClient;
-use lorawan::physical_parameters::SpreadingFactor;
+
 use lorawan::{device::Device, utils::eui::EUI64};
 
-use crate::communicator::{LoRaWANCommunicator, CommunicatorError, LoRaPacket};
+use crate::communicator::{CommunicatorError, LoRaWANCommunicator, ReceivedTransmission};
 use crate::configs::RadioDeviceConfig;
 use crate::devices::lorawan_device::LoRaWANDevice;
 
@@ -74,7 +74,7 @@ impl LoRaWANCommunicator for RadioCommunicator {
     async fn receive_downlink(
         &self,
         _timeout: Option<Duration>,
-    ) -> Result<HashMap<SpreadingFactor, LoRaPacket>, CommunicatorError> {
+    ) -> Result<Vec<ReceivedTransmission>, CommunicatorError> {
         todo!()
     }
 }

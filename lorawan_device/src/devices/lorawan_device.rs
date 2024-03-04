@@ -66,9 +66,9 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
             //writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
             
             //TODO ESTRARRE MEGLIO I PAYLOAD - sf based?
-            let (_sf, content) = payloads.iter().next().ok_or(LoRaWANError::MissingDownlink)?;
+            let content = payloads.first().ok_or(LoRaWANError::MissingDownlink)?;
 
-            let packet = LoRaWANPacket::from_bytes(&content.payload, None, false)?;
+            let packet = LoRaWANPacket::from_bytes(&content.transmission.payload, None, false)?;
 
             if let Payload::MACPayload(p) = packet.payload() {
                 let fcnt = p.fhdr().fcnt();
@@ -84,7 +84,7 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
             };
 
 
-            let packet = LoRaWANPacket::from_bytes(&content.payload, Some(&self.device), false)?;
+            let packet = LoRaWANPacket::from_bytes(&content.transmission.payload, Some(&self.device), false)?;
             //println!("{packet:?}");
             if let Payload::MACPayload(p) = packet.payload() {
                 if let Some(frmp) = p.frm_payload() {
@@ -114,10 +114,10 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
         let payloads = self.communication.receive_downlink(Some(Duration::from_secs(5))).await?;
         
         //TODO ESTRARRE MEGLIO I PAYLOAD
-        let content = payloads.values().next().ok_or(LoRaWANError::MissingDownlink)?;
+        let content = payloads.first().ok_or(LoRaWANError::MissingDownlink)?;
         //println!("{}", PrettyHexSlice(&content.payload));
 
-        let packet = LoRaWANPacket::from_bytes(&content.payload, Some(&self.device), false)?;
+        let packet = LoRaWANPacket::from_bytes(&content.transmission.payload, Some(&self.device), false)?;
         //println!("{packet:?}");
         
         if let Payload::JoinAccept(ja) = packet.payload() {

@@ -5,7 +5,7 @@ mod compiled;
 use std::{fs::{self, File, OpenOptions}, io::BufReader, time::{Duration, SystemTime}};
 use blockchain_api::{BlockchainClient, exec_bridge::BlockchainExeClient};
 
-use lorawan_device::{configs::{DeviceConfig, TcpDeviceConfig}, devices::{debug_device::DebugDevice, tcp_device::TcpDevice}};
+use lorawan_device::{configs::{DeviceConfig, UDPDeviceConfig}, devices::{debug_device::DebugDevice, udp_device::UDPDevice}};
 use lorawan::{utils::{eui::EUI64, PrettyHexSlice}, device::{Device, DeviceClass, LoRaWANVersion}, regional_parameters::region::{Region, RegionalParameters}, encryption::key::Key};
 use serde::Deserialize;
 use tokio::{task::JoinHandle, time::Instant};
@@ -118,7 +118,7 @@ async fn blockchain_main() {
         let handle = tokio::spawn(async move {
             let thread_id = i;
             let d = Device::new(DeviceClass::A, Some(RegionalParameters::new(Region::EU863_870)), dev_eui, join_eui, key, key, LoRaWANVersion::V1_0_4);
-            let mut device = DebugDevice::from(TcpDevice::create(d, &TcpDeviceConfig {
+            let mut device = DebugDevice::from(UDPDevice::create(d, &UDPDeviceConfig {
                 addr: nc_ip,
                 port: 9090,
             }).await);

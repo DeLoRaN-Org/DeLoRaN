@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::fmt::Debug;
 use std::{fs, thread};
@@ -6,13 +5,12 @@ use std::time::Duration;
 use async_trait::async_trait;
 use blockchain_api::BlockchainClient;
 use blockchain_api::exec_bridge::BlockchainExeClient;
-use lorawan::physical_parameters::SpreadingFactor;
 use lorawan::{device::Device, utils::eui::EUI64};
 use pyo3::{PyAny, Python, Py};
 use pyo3::types::PyModule;
 use tokio::sync::{oneshot, mpsc};
 
-use crate::communicator::{LoRaPacket, extract_dev_id, CommunicatorError, LoRaWANCommunicator};
+use crate::communicator::{extract_dev_id, CommunicatorError, LoRaPacket, LoRaWANCommunicator, ReceivedTransmission};
 use crate::configs::{RadioDeviceConfig, ColosseumDeviceConfig};
 use crate::devices::lorawan_device::LoRaWANDevice;
 
@@ -156,7 +154,7 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
                         config.address.to_string(),
                         radio_config.rx_gain,
                         radio_config.tx_gain,
-                        radio_config.bandwidth,
+                        radio_config.bandwidth.hz(),
                         radio_config.rx_freq,
                         radio_config.tx_freq,
                         radio_config.sample_rate,
@@ -265,7 +263,7 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
     async fn receive_downlink(
         &self,
         timeout: Option<Duration>,
-    ) -> Result<HashMap<SpreadingFactor, LoRaPacket>, CommunicatorError> {
+    ) -> Result<Vec<ReceivedTransmission>, CommunicatorError> {
         let (send, recv) = oneshot::channel();
         let _ = self
             .receiver_send
@@ -278,7 +276,7 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
                     if r {
                         Ok(buffers
                             .into_iter()
-                            .map(|(sf, p)| (SpreadingFactor::new(sf), p))
+                            .map(|(_, p)| (ReceivedTransmission::from(p)))
                             .collect())
                     } else {
                         Err(CommunicatorError::Radio(

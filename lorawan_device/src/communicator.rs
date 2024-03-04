@@ -1,10 +1,10 @@
-use std::{collections::HashMap, time::Duration};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use pyo3::prelude::*;
 
 use async_trait::async_trait;
 use lorawan::{
-    physical_parameters::SpreadingFactor,
+    physical_parameters::{LoRaBandwidth, CodeRate, SpreadingFactor},
     utils::{errors::LoRaWANError, eui::EUI64},
 };
 
@@ -34,6 +34,7 @@ pub fn extract_dev_id(dev_eui: Option<EUI64>) -> u16 {
 pub enum CommunicatorError {
     Radio(String),
     TCP(std::io::Error),
+    UDP(std::io::Error),
     LoRaWANError(LoRaWANError),
 }
 
@@ -53,7 +54,7 @@ pub trait LoRaWANCommunicator: Send + Sync + Sized {
     async fn receive_downlink(
         &self,
         timeout: Option<Duration>,
-    ) -> Result<HashMap<SpreadingFactor, LoRaPacket>, CommunicatorError>;
+    ) -> Result<Vec<ReceivedTransmission>, CommunicatorError>;
 }
 
 impl From<LoRaWANError> for CommunicatorError {
@@ -102,5 +103,108 @@ impl<'source> FromPyObject<'source> for LoRaPacket {
             rssi: ob.getattr("rssi")?.extract()?,
             snr: ob.getattr("snr")?.extract()?,
         })
+    }
+}
+
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Position {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+impl Position {
+    pub fn distance(&self, other: &Position) -> f32 {
+        ((self.x - other.x).powi(2) + (self.y - other.y).powi(2) + (self.z - other.z).powi(2)).sqrt()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ArrivalStats {
+    pub time: u128,
+    pub rssi: f32,
+    pub snr: f32,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Transmission {
+    pub start_position: Position,
+    pub start_time: u128,
+    pub frequency: f32,
+    pub bandwidth: LoRaBandwidth,
+    pub spreading_factor: SpreadingFactor,
+    pub coding_rate: CodeRate,
+    pub starting_power: f32,
+
+    pub payload: Vec<u8>,
+}
+
+impl Transmission {
+    //https://github.com/avbentem/airtime-calculator/blob/master/doc/LoraDesignGuide_STD.pdf
+    pub fn time_on_air(&self) -> u128 {
+        let header_disabled = 0_u32; // implicit header disabled (H=0) or not (H=1), can only have implicit header with SF6
+        let mut data_rate_optimization = 0_u32; // low data rate optimization enabled (=1) or not (=0)
+        if self.bandwidth == LoRaBandwidth::BW125 && (self.spreading_factor == SpreadingFactor::SF11 || self.spreading_factor == SpreadingFactor::SF12) {
+            data_rate_optimization = 1; // low data rate optimization mandated for BW125 with SF11 and SF12
+        }
+
+        let npream = 8_u32; // number of preamble symbol (12.25 from Utz paper)
+        let tsym = ((2.0f32).powi(self.spreading_factor.value() as i32) / (self.bandwidth.khz())) * 1000.0;
+        let tpream = (npream as f32 + 4.25) * tsym;
+
+        let cr = match self.coding_rate {
+            CodeRate::CR4_5 => 5,
+            CodeRate::CR4_6 => 6,
+            CodeRate::CR5_7 => 7,
+            CodeRate::CR4_8 => 8,
+        } - 4;
+
+
+        let v1 = ((8 * (self.payload.len()) - 4 * (self.spreading_factor.value() as usize) + 44 - 20 * header_disabled as usize)  //28 + 16 = 44(? -->     payloadSymbNB = 8 + max(math.ceil((8.0*pl-4.0*sf+28+16-20*H)/(4.0*(sf-2*DE)))*(cr+4),0))
+            / (4 * ((self.spreading_factor.value() as usize) - 2 * data_rate_optimization as usize))) * (cr + 4);
+        let payload_symb_nb = 8 + (if v1 > 0 { v1 } else { 0 });
+        let tpayload = (payload_symb_nb as f32) * tsym;
+        (tpream + tpayload).round() as u128
+    }
+
+    pub fn ended(&self) -> bool {
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() > self.start_time + self.time_on_air()
+    }
+}
+
+
+#[derive(Debug, Clone, Default)]
+pub struct ReceivedTransmission {
+    pub transmission: Transmission,
+    pub arrival_stats: ArrivalStats,
+}
+
+impl ReceivedTransmission {
+    pub fn time_on_air(&self) -> u128 {
+        self.transmission.time_on_air()
+    }
+}
+
+
+impl From<LoRaPacket> for ReceivedTransmission {
+    fn from(packet: LoRaPacket) -> Self {
+        Self {
+            transmission: Transmission {
+                start_position: Position { x: 0.0, y: 0.0, z: 0.0 },
+                start_time: 0,
+                frequency: 868_000_000.0,
+                bandwidth: packet.bw.into(),
+                spreading_factor: SpreadingFactor::new(packet.sf),
+                coding_rate: CodeRate::CR4_5,
+                starting_power: packet.rssi,
+                payload: packet.payload,
+            },
+            arrival_stats: ArrivalStats {
+                time: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(),
+                rssi: packet.rssi,
+                snr: packet.snr,
+            },
+        }
     }
 }

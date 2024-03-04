@@ -1,10 +1,22 @@
 use std::net::IpAddr;
 
-use lorawan::{device::Device, physical_parameters::{CodeRate, DataRate, SpreadingFactor}, regional_parameters::region::Region};
+use lorawan::{device::Device, physical_parameters::{CodeRate, DataRate, LoRaBandwidth, SpreadingFactor}, regional_parameters::region::Region};
 use serde::{Serialize, Deserialize};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct TcpDeviceConfig {
+    pub addr: String,
+    pub port: u16
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct UDPDeviceConfigNC {
+    pub listening_addr: String,
+    pub listening_port: u16
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct UDPDeviceConfig {
     pub addr: String,
     pub port: u16
 }
@@ -17,7 +29,7 @@ pub struct RadioDeviceConfig {
     pub code_rate: CodeRate,
     pub rx_gain: u8,
     pub tx_gain: u8,
-    pub bandwidth: f32,
+    pub bandwidth: LoRaBandwidth,
     pub rx_freq: f32,
     pub tx_freq: f32,
     pub sample_rate: f32,
@@ -42,6 +54,7 @@ pub struct MockDeviceConfig {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum DeviceConfigType {
     TCP(TcpDeviceConfig),
+    UDP(UDPDeviceConfig),
     RADIO(RadioDeviceConfig),
     COLOSSEUM(ColosseumDeviceConfig),
     MOCK

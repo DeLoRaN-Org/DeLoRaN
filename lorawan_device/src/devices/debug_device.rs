@@ -1,18 +1,16 @@
 use std::{
-    collections::HashMap,
     ops::{Deref, DerefMut},
     time::{Duration, SystemTime},
 };
 
 use crate::{
-    communicator::{CommunicatorError, LoRaPacket, LoRaWANCommunicator},
+    communicator::{CommunicatorError, LoRaWANCommunicator, ReceivedTransmission},
     devices::lorawan_device::LoRaWANDevice,
 };
 use async_trait::async_trait;
 use blockchain_api::{exec_bridge::BlockchainExeClient, BlockchainClient};
 use lorawan::{
     device::Device,
-    physical_parameters::SpreadingFactor,
     utils::{eui::EUI64, PrettyHexSlice},
 };
 
@@ -118,7 +116,7 @@ impl<T: LoRaWANCommunicator> LoRaWANCommunicator for DebugCommunicator<T> {
     async fn receive_downlink(
         &self,
         timeout: Option<Duration>,
-    ) -> Result<HashMap<SpreadingFactor, LoRaPacket>, CommunicatorError> {
+    ) -> Result<Vec<ReceivedTransmission>, CommunicatorError> {
         println!(
             "[{:?}] Device {} Waiting for downlink",
             SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(),
@@ -130,8 +128,8 @@ impl<T: LoRaWANCommunicator> LoRaWANCommunicator for DebugCommunicator<T> {
             "[{:?}] Device {} Ended waiting! Received {} packets: {}",
             SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(),
             self.id.map(|v| PrettyHexSlice(&*v).to_string())
-                .unwrap_or("Unknown".to_owned()), r.values().map(|v| {
-                    PrettyHexSlice(&v.payload).to_string()
+                .unwrap_or("Unknown".to_owned()), r.iter().map(|v| {
+                    PrettyHexSlice(&v.transmission.payload).to_string()
                 }).collect::<Vec<_>>().join(","),
             r.len()
         );
