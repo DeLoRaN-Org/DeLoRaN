@@ -4,7 +4,7 @@ use lorawan::{device::Device, utils::{traits::ToBytes, errors::LoRaWANError}, lo
 use crate::communicator::{LoRaWANCommunicator, CommunicatorError};
 
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq)]
 pub struct LoRaWANDevice<T> 
 where T: LoRaWANCommunicator + Send + Sync {
     device: Device,

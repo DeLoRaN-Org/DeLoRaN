@@ -1,4 +1,4 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{hash::Hash, time::{Duration, SystemTime, UNIX_EPOCH}};
 
 use pyo3::prelude::*;
 
@@ -134,11 +134,21 @@ pub struct Transmission {
     pub frequency: f32,
     pub bandwidth: LoRaBandwidth,
     pub spreading_factor: SpreadingFactor,
-    pub coding_rate: CodeRate,
+    pub code_rate: CodeRate,
     pub starting_power: f32,
     pub uplink: bool,
 
     pub payload: Vec<u8>,
+}
+
+impl Hash for Transmission {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.start_time.hash(state);
+        self.bandwidth.hash(state);
+        self.spreading_factor.hash(state);
+        self.uplink.hash(state);
+        self.payload.hash(state);
+    }
 }
 
 impl Transmission {
@@ -154,7 +164,7 @@ impl Transmission {
         let tsym = ((2.0f32).powi(self.spreading_factor.value() as i32) / (self.bandwidth.khz())) * 1000.0;
         let tpream = (npream as f32 + 4.25) * tsym;
 
-        let cr = match self.coding_rate {
+        let cr = match self.code_rate {
             CodeRate::CR4_5 => 5,
             CodeRate::CR4_6 => 6,
             CodeRate::CR5_7 => 7,
@@ -197,7 +207,7 @@ impl From<LoRaPacket> for ReceivedTransmission {
                 frequency: 868_000_000.0,
                 bandwidth: packet.bw.into(),
                 spreading_factor: SpreadingFactor::new(packet.sf),
-                coding_rate: CodeRate::CR4_5,
+                code_rate: CodeRate::CR4_5,
                 starting_power: packet.rssi,
                 uplink: false,
                 payload: packet.payload,

@@ -153,8 +153,8 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
                     (
                         config.address.to_string(),
                         radio_config.bandwidth.hz(),
-                        radio_config.rx_freq,
-                        radio_config.tx_freq,
+                        radio_config.freq,
+                        radio_config.freq,
                         radio_config.sample_rate,
                         radio_config.rx_chan_id,
                         radio_config.tx_chan_id,
