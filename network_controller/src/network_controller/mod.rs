@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use blockchain_api::{BlockchainError, BlockchainClient};
 use lorawan::{utils::{increment_nonce, nonce_valid, PrettyHexSlice, traits::ToBytesWithContext, errors::LoRaWANError, eui::EUI64}, device::Device, lorawan_packet::{LoRaWANPacket, join::{JoinAcceptPayload, JoinRequestType}, payload::Payload, mhdr::{MHDR, MType, Major}, mac_payload::MACPayload, fhdr::FHDR, fctrl::{FCtrl, DownlinkFCtrl}, mac_commands}};
-use lorawan_device::{communicator::LoRaWANCommunicator, configs::UDPNCConfig, devices::debug_device::DebugCommunicator};
+use lorawan_device::{communicator::{LoRaWANCommunicator, ReceivedTransmission, Transmission}, configs::UDPNCConfig, devices::debug_device::DebugCommunicator};
 use openssl::sha::sha256;
 use serde::{Serialize, Deserialize};
 
@@ -194,7 +194,7 @@ impl NetworkController {
         let client: Arc<BC> = Arc::new(*BC::from_config(blockchain_config).await.unwrap());
         let communicator = Arc::new(DebugCommunicator::from(LC::from_config(config).await.unwrap(), None));
         loop {
-            match communicator.receive_downlink(None).await {
+            match communicator.receive(None).await {
                 Ok(content) => {
                     for packet in content {
                         if !packet.transmission.payload.is_empty() {
@@ -209,7 +209,7 @@ impl NetworkController {
                                 match answer {
                                     Ok(ans) => {
                                         if let Some((in_answer, dest)) = &ans {
-                                            radio_clone.send_uplink(in_answer, None, Some(*dest)).await.unwrap();
+                                            radio_clone.send(in_answer, None, Some(*dest)).await.unwrap();
                                         }
                                         match client_clone.create_uplink(&packet.transmission.payload, (ans.map(|v| v.0)).as_deref(), n_id).await {
                                             Ok(_) =>  {
@@ -248,17 +248,31 @@ impl NetworkController {
 
             let mut buf = Vec::with_capacity(512);
             while let Ok((bytes_read, addr)) = socket.recv_buf_from(&mut buf).await {
-                //let mm = m.clone();
+                let transmission = serde_json::from_slice::<ReceivedTransmission>(&buf[..bytes_read]).unwrap();
                 let c = Arc::clone(&client);
-                let data = buf[..bytes_read].to_vec();
+                
                 tokio::spawn(async move {
+                    let data = &transmission.transmission.payload;
                     let mhdr = MHDR::from_bytes(data[0]);
                     let answer = Self::dispatch_task(&mhdr, &data, &c).await;
                     match answer {
                         Ok(ans) => {
                             if let Some((in_answer, _)) = &ans {
                                 let s = UdpSocket::bind("0.0.0.0:0").await.unwrap();
-                                s.send_to(in_answer, addr).await.unwrap();
+
+                                let t = Transmission {
+                                    start_position: Default::default(),
+                                    start_time: Default::default(),
+                                    frequency: transmission.transmission.frequency,
+                                    bandwidth: transmission.transmission.bandwidth,
+                                    spreading_factor: transmission.transmission.spreading_factor,
+                                    code_rate: transmission.transmission.code_rate,
+                                    starting_power: Default::default(),
+                                    uplink: false,
+                                    payload: in_answer.clone(),
+                                };
+                                let bytes = serde_json::to_vec(&t).unwrap();
+                                s.send_to(&bytes, addr).await.unwrap();
                             }
                             match c.create_uplink(&data, (ans.map(|v| v.0)).as_deref(), n_id).await {
                                 Ok(_) =>  {

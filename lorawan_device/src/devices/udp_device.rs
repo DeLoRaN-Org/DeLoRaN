@@ -65,7 +65,7 @@ impl LoRaWANCommunicator for UDPCommunicator {
         })
     }
 
-    async fn send_uplink(
+    async fn send(
         &self,
         bytes: &[u8],
         _src: Option<EUI64>,
@@ -76,7 +76,7 @@ impl LoRaWANCommunicator for UDPCommunicator {
         Ok(())
     }
 
-    async fn receive_downlink(
+    async fn receive(
         &self,
         timeout: Option<Duration>,
     ) -> Result<Vec<ReceivedTransmission>, CommunicatorError> {

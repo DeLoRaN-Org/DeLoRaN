@@ -7,6 +7,7 @@ use lorawan::{
     physical_parameters::{LoRaBandwidth, CodeRate, SpreadingFactor},
     utils::{errors::LoRaWANError, eui::EUI64},
 };
+use serde::{Deserialize, Serialize};
 
 pub fn extract_dev_id(dev_eui: Option<EUI64>) -> u16 {
     dev_eui.map_or(0, |v| {
@@ -44,14 +45,14 @@ pub trait LoRaWANCommunicator: Send + Sync + Sized {
     
     async fn from_config(config: &Self::Config) -> Result<Self, CommunicatorError>;
     
-    async fn send_uplink(
+    async fn send(
         &self,
         bytes: &[u8],
         src: Option<EUI64>,
         dest: Option<EUI64>,
     ) -> Result<(), CommunicatorError>;
 
-    async fn receive_downlink(
+    async fn receive(
         &self,
         timeout: Option<Duration>,
     ) -> Result<Vec<ReceivedTransmission>, CommunicatorError>;
@@ -107,7 +108,7 @@ impl<'source> FromPyObject<'source> for LoRaPacket {
 }
 
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Position {
     pub x: f32,
     pub y: f32,
@@ -120,14 +121,16 @@ impl Position {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
 pub struct ArrivalStats {
     pub time: u128,
     pub rssi: f32,
     pub snr: f32,
 }
 
-#[derive(Debug, Clone, Default)]
+impl Eq for ArrivalStats {}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Transmission {
     pub start_position: Position,
     pub start_time: u128,
@@ -140,6 +143,14 @@ pub struct Transmission {
 
     pub payload: Vec<u8>,
 }
+
+impl PartialEq for Transmission {
+    fn eq(&self, other: &Self) -> bool {
+        self.start_time == other.start_time && self.bandwidth == other.bandwidth && self.spreading_factor == other.spreading_factor && self.code_rate == other.code_rate && self.uplink == other.uplink && self.payload == other.payload
+    }
+}
+
+impl Eq for Transmission {}
 
 impl Hash for Transmission {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -185,10 +196,16 @@ impl Transmission {
 }
 
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReceivedTransmission {
     pub transmission: Transmission,
     pub arrival_stats: ArrivalStats,
+}
+
+impl Hash for ReceivedTransmission {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.transmission.hash(state);
+    }
 }
 
 impl ReceivedTransmission {

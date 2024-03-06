@@ -319,10 +319,7 @@ impl LoRaWANPacket {
     }
 
     pub fn is_join_request(&self) -> bool {
-        match self.mhdr.mtype() {
-            MType::JoinRequest => true,
-            _ => false,
-        }
+        matches!(self.mhdr.mtype(), MType::JoinRequest)
     }
 
     pub fn extract_mtype(first_byte: u8) -> MType {

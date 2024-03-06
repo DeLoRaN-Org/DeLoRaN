@@ -62,7 +62,7 @@ impl LoRaWANCommunicator for RadioCommunicator {
         Ok(Self { config: *config })
     }
 
-    async fn send_uplink(
+    async fn send(
         &self,
         _bytes: &[u8],
         _src: Option<EUI64>,
@@ -71,7 +71,7 @@ impl LoRaWANCommunicator for RadioCommunicator {
         todo!()
     }
     
-    async fn receive_downlink(
+    async fn receive(
         &self,
         _timeout: Option<Duration>,
     ) -> Result<Vec<ReceivedTransmission>, CommunicatorError> {

@@ -8,29 +8,29 @@ use crate::communicator::{LoRaWANCommunicator, CommunicatorError};
 pub struct LoRaWANDevice<T> 
 where T: LoRaWANCommunicator + Send + Sync {
     device: Device,
-    communication: T,
+    communicator: T,
     //config: DeviceConfig,
 }
 
 impl<T: LoRaWANCommunicator + Send + Sync> From<LoRaWANDevice<T>> for (Device, T) {
     fn from(val: LoRaWANDevice<T>) -> Self {
-        (val.device, val.communication)
+        (val.device, val.communicator)
     }
 }
 
 impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
-    pub fn new(device: Device, communication: T/*, config: DeviceConfig*/) -> Self {
+    pub fn new(device: Device, communicator: T/*, config: DeviceConfig*/) -> Self {
         Self {
-            device, communication//, config
+            device, communicator//, config
         }
     }
 
     pub fn communicator(&self) -> &T {
-        &self.communication
+        &self.communicator
     }
     
     pub fn communicator_mut(&mut self) -> &mut T {
-        &mut self.communication
+        &mut self.communicator
     }
 
     fn fold_maccomands(fopts: Option<&[EDMacCommands]>) -> Option<Vec<u8>> {
@@ -52,11 +52,11 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
     pub async fn send_uplink(&mut self, payload: Option<&[u8]>, confirmed: bool, fport: Option<u8>, fopts: Option<&[EDMacCommands]>) -> Result<(), CommunicatorError> {
         let fopts: Option<Vec<u8>> = LoRaWANDevice::<T>::fold_maccomands(fopts);
         let packet = self.device.create_uplink(payload, confirmed, fport, fopts)?;
-        self.communication.send_uplink(&packet, Some(*self.dev_eui()),None).await.unwrap();
+        self.communicator.send(&packet, Some(*self.dev_eui()),None).await.unwrap();
         if confirmed {
             //TODO REMOVE PERFORMANCES CHECKS
             //let before = Instant::now();
-            let payloads = self.communication.receive_downlink(Some(Duration::from_secs(5))).await.unwrap();
+            let payloads = self.communicator.receive(Some(Duration::from_secs(5))).await.unwrap();
             //let after = Instant::now();
             
             //let mut file = OpenOptions::new()
@@ -111,8 +111,8 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
         //println!("{}", PrettyHexSlice(&join_request));
         
         
-        self.communication.send_uplink(&join_request, Some(*self.dev_eui()), None).await?;
-        let payloads = self.communication.receive_downlink(Some(Duration::from_secs(5))).await?;
+        self.communicator.send(&join_request, Some(*self.dev_eui()), None).await?;
+        let payloads = self.communicator.receive(Some(Duration::from_secs(5))).await?;
         
         //TODO ESTRARRE MEGLIO I PAYLOAD
         let content = payloads.first().ok_or(LoRaWANError::MissingDownlink)?;
@@ -147,7 +147,7 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
     pub async fn send_maccommands(&mut self, mac_commands: &[EDMacCommands], confirmed: bool) -> Result<(), CommunicatorError> {        
         let content: Vec<u8> = self.device.create_maccommands(mac_commands)?;
         let uplink = self.device.create_uplink(Some(&content), confirmed, Some(0), None)?;
-        self.communication.send_uplink(&uplink, Some(*self.dev_eui()), None).await
+        self.communicator.send(&uplink, Some(*self.dev_eui()), None).await
     }
 
     fn nonce_valid(received_nonce: u16, current_nonce: u16) -> (bool, bool) {

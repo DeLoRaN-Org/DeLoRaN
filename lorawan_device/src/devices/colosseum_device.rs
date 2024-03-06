@@ -231,7 +231,7 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
         })
     }
 
-    async fn send_uplink(
+    async fn send(
         &self,
         bytes: &[u8],
         src: Option<EUI64>,
@@ -258,7 +258,7 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
         }
     }
 
-    async fn receive_downlink(
+    async fn receive(
         &self,
         timeout: Option<Duration>,
     ) -> Result<Vec<ReceivedTransmission>, CommunicatorError> {

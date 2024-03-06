@@ -95,7 +95,7 @@ impl<T: LoRaWANCommunicator> LoRaWANCommunicator for DebugCommunicator<T> {
         })
     }
 
-    async fn send_uplink(
+    async fn send(
         &self,
         bytes: &[u8],
         src: Option<EUI64>,
@@ -110,10 +110,10 @@ impl<T: LoRaWANCommunicator> LoRaWANCommunicator for DebugCommunicator<T> {
             dest.map(|v| PrettyHexSlice(&*v).to_string())
                 .unwrap_or("Unknown".to_owned())
         );
-        self.communicator.send_uplink(bytes, src, dest).await
+        self.communicator.send(bytes, src, dest).await
     }
 
-    async fn receive_downlink(
+    async fn receive(
         &self,
         timeout: Option<Duration>,
     ) -> Result<Vec<ReceivedTransmission>, CommunicatorError> {
@@ -123,7 +123,7 @@ impl<T: LoRaWANCommunicator> LoRaWANCommunicator for DebugCommunicator<T> {
             self.id.map(|v| PrettyHexSlice(&*v).to_string())
                 .unwrap_or("Unknown".to_owned())
         );
-        let r = self.communicator.receive_downlink(timeout).await?;
+        let r = self.communicator.receive(timeout).await?;
         println!(
             "[{:?}] Device {} Ended waiting! Received {} packets: {}",
             SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(),
