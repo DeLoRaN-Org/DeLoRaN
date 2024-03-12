@@ -52,11 +52,11 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
     pub async fn send_uplink(&mut self, payload: Option<&[u8]>, confirmed: bool, fport: Option<u8>, fopts: Option<&[EDMacCommands]>) -> Result<(), CommunicatorError> {
         let fopts: Option<Vec<u8>> = LoRaWANDevice::<T>::fold_maccomands(fopts);
         let packet = self.device.create_uplink(payload, confirmed, fport, fopts)?;
-        self.communicator.send(&packet, Some(*self.dev_eui()),None).await.unwrap();
+        self.communicator.send(&packet, Some(*self.dev_eui()),None).await?;
         if confirmed {
             //TODO REMOVE PERFORMANCES CHECKS
             //let before = Instant::now();
-            let payloads = self.communicator.receive(Some(Duration::from_secs(5))).await.unwrap();
+            let payloads = self.communicator.receive(Some(Duration::from_secs(5))).await?;
             //let after = Instant::now();
             
             //let mut file = OpenOptions::new()
@@ -91,7 +91,7 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
                 if let Some(frmp) = p.frm_payload() {
                     match p.fport() {
                         Some(0) | None => {
-                            let commands = NCMacCommands::from_bytes(frmp).unwrap();
+                            let commands = NCMacCommands::from_bytes(frmp)?;
                             println!("{commands:?}")
                         },
                         Some(_port) => {
@@ -104,7 +104,17 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
         Ok(())
     }
 
-
+    pub async fn join(&mut self, attempts: Option<u32>, delay: Option<Duration>) -> Result<(), CommunicatorError> {
+        for _ in 0..attempts.unwrap_or(3) {
+            println!("Sleeping for {delay:?}");
+            if let Some(delay) = delay { tokio::time::sleep(delay).await; }
+            if let Err(e) = self.send_join_request().await {
+                    println!("Join failed: {e:?}, retrying...");
+            }
+            if self.device.is_initialized() { break; }
+        }
+        Ok(())
+    }
 
     pub async fn send_join_request(&mut self) -> Result<(), CommunicatorError> {
         let join_request = self.device.create_join_request()?;
@@ -135,10 +145,8 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
                 eprintln!("Invalid join_nonce, expected > {cjn_u32}, received {jn_u32}"); 
                 return Err(CommunicatorError::LoRaWANError(LoRaWANError::InvalidNonce)) 
             }
-            else { 
-                self.device.join_context_mut().update_join_nonce(jn_u32);
-                self.device.generate_session_context(ja)?;
-            }
+            self.device.join_context_mut().update_join_nonce(jn_u32);
+            self.device.generate_session_context(ja)?;
             //println!("{}",self.device);
         }
         Ok(())

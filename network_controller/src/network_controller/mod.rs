@@ -244,39 +244,38 @@ impl NetworkController {
             //let nc_addr: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), self.config.tcp_nc_port);
             
             let client: Arc<BC> = Arc::new(*BC::from_config(&c).await.unwrap());
-            let socket = UdpSocket::bind(format!("{}:{}",config.addr, config.port)).await.unwrap();
+            let socket = Arc::new(UdpSocket::bind(format!("{}:{}",config.addr, config.port)).await.unwrap());
 
-            let mut buf = Vec::with_capacity(512);
-            while let Ok((bytes_read, addr)) = socket.recv_buf_from(&mut buf).await {
+            let mut buf = [0_u8; 512];
+            while let Ok((bytes_read, addr)) = socket.recv_from(&mut buf).await {
+                //println!("Content: {}", String::from_utf8_lossy(&buf[..bytes_read]));
                 let transmission = serde_json::from_slice::<ReceivedTransmission>(&buf[..bytes_read]).unwrap();
                 let c = Arc::clone(&client);
-                
+                let ans_sock = Arc::clone(&socket);
                 tokio::spawn(async move {
                     let data = &transmission.transmission.payload;
                     let mhdr = MHDR::from_bytes(data[0]);
                     let answer = Self::dispatch_task(&mhdr, &data, &c).await;
                     match answer {
                         Ok(ans) => {
-                            if let Some((in_answer, _)) = &ans {
-                                let s = UdpSocket::bind("0.0.0.0:0").await.unwrap();
-
-                                let t = Transmission {
-                                    start_position: Default::default(),
-                                    start_time: Default::default(),
-                                    frequency: transmission.transmission.frequency,
-                                    bandwidth: transmission.transmission.bandwidth,
-                                    spreading_factor: transmission.transmission.spreading_factor,
-                                    code_rate: transmission.transmission.code_rate,
-                                    starting_power: Default::default(),
-                                    uplink: false,
-                                    payload: in_answer.clone(),
-                                };
-                                let bytes = serde_json::to_vec(&t).unwrap();
-                                s.send_to(&bytes, addr).await.unwrap();
-                            }
-                            match c.create_uplink(&data, (ans.map(|v| v.0)).as_deref(), n_id).await {
+                            match c.create_uplink(&data, (ans.as_ref().map(|v| v.0.clone())).as_deref(), n_id).await {
                                 Ok(_) =>  {
                                     println!("uplink created successfully");
+                                    if let Some((in_answer, _)) = &ans {
+                                        let t = Transmission {
+                                            start_position: Default::default(),
+                                            start_time: Default::default(),
+                                            frequency: transmission.transmission.frequency,
+                                            bandwidth: transmission.transmission.bandwidth,
+                                            spreading_factor: transmission.transmission.spreading_factor,
+                                            code_rate: transmission.transmission.code_rate,
+                                            starting_power: Default::default(),
+                                            uplink: false,
+                                            payload: in_answer.clone(),
+                                        };
+                                        let bytes = serde_json::to_vec(&t).unwrap();
+                                        ans_sock.send_to(&bytes, addr).await.unwrap();
+                                    }
                                 }, 
                                 Err(e) => {
                                     eprintln!("Error creating uplink with answer: {e:?}")

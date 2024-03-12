@@ -165,27 +165,28 @@ impl Hash for Transmission {
 impl Transmission {
     //https://github.com/avbentem/airtime-calculator/blob/master/doc/LoraDesignGuide_STD.pdf
     pub fn time_on_air(&self) -> u128 {
-        let header_disabled = 0_u32; // implicit header disabled (H=0) or not (H=1), can only have implicit header with SF6
+        let header_disabled = 0_usize; // implicit header disabled (H=0) or not (H=1), can only have implicit header with SF6
         let mut data_rate_optimization = 0_u32; // low data rate optimization enabled (=1) or not (=0)
         if self.bandwidth == LoRaBandwidth::BW125 && (self.spreading_factor == SpreadingFactor::SF11 || self.spreading_factor == SpreadingFactor::SF12) {
             data_rate_optimization = 1; // low data rate optimization mandated for BW125 with SF11 and SF12
         }
 
         let npream = 8_u32; // number of preamble symbol (12.25 from Utz paper)
-        let tsym = ((2.0f32).powi(self.spreading_factor.value() as i32) / (self.bandwidth.khz())) * 1000.0;
+        let tsym = (2.0f32).powi(self.spreading_factor.value() as i32) / (self.bandwidth.khz());
         let tpream = (npream as f32 + 4.25) * tsym;
 
         let cr = match self.code_rate {
-            CodeRate::CR4_5 => 5,
-            CodeRate::CR4_6 => 6,
-            CodeRate::CR5_7 => 7,
-            CodeRate::CR4_8 => 8,
-        } - 4;
+            CodeRate::CR4_5 => 1,
+            CodeRate::CR4_6 => 2,
+            CodeRate::CR5_7 => 3,
+            CodeRate::CR4_8 => 4,
+        };
 
+        let num = (8* self.payload.len() - 4 * (self.spreading_factor.value() as usize) + 28 + 16 - 20 * header_disabled) as f32;
+        let den = 4.0 * (self.spreading_factor.value() as f32 - 2.0 * data_rate_optimization as f32);
+        let v1 = (num / den).ceil() * (cr as f32 + 4.0);
 
-        let v1 = ((8 * (self.payload.len()) - 4 * (self.spreading_factor.value() as usize) + 44 - 20 * header_disabled as usize)  //28 + 16 = 44(? -->     payloadSymbNB = 8 + max(math.ceil((8.0*pl-4.0*sf+28+16-20*H)/(4.0*(sf-2*DE)))*(cr+4),0))
-            / (4 * ((self.spreading_factor.value() as usize) - 2 * data_rate_optimization as usize))) * (cr + 4);
-        let payload_symb_nb = 8 + (if v1 > 0 { v1 } else { 0 });
+        let payload_symb_nb = 8.0 + (if v1 > 0.0 { v1 } else { 0.0 });
         let tpayload = (payload_symb_nb as f32) * tsym;
         (tpream + tpayload).round() as u128
     }
