@@ -187,7 +187,7 @@ async fn main() {
     let nc_endpoint = ["wineslab-049"];
     #[allow(unused)]
     let devices_endpoint = ["wineslab-049"];
-    let devices_per_device = 10000;
+    let devices_per_device = 40000;
     create_configs(0, 1, devices_per_device);
     //send_commands(&nc_endpoint, devices_per_device);
 }

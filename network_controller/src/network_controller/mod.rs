@@ -202,14 +202,14 @@ impl NetworkController {
                             let mhdr = MHDR::from_bytes(packet.transmission.payload[0]);
     
                             let client_clone = Arc::clone(&client);
-                            let radio_clone = Arc::clone(&communicator);
+                            let cc = Arc::clone(&communicator);
     
                             tokio::spawn(async move {
                                 let answer = Self::dispatch_task(&mhdr, &packet.transmission.payload, &client_clone).await;
                                 match answer {
                                     Ok(ans) => {
                                         if let Some((in_answer, dest)) = &ans {
-                                            radio_clone.send(in_answer, None, Some(*dest)).await.unwrap();
+                                            cc.send(in_answer, None, Some(*dest)).await.unwrap();
                                         }
                                         match client_clone.create_uplink(&packet.transmission.payload, (ans.map(|v| v.0)).as_deref(), n_id).await {
                                             Ok(_) =>  {
@@ -258,24 +258,24 @@ impl NetworkController {
                     let answer = Self::dispatch_task(&mhdr, &data, &c).await;
                     match answer {
                         Ok(ans) => {
+                            if let Some((in_answer, _)) = &ans {
+                                let t = Transmission {
+                                    start_position: Default::default(),
+                                    start_time: Default::default(),
+                                    frequency: transmission.transmission.frequency,
+                                    bandwidth: transmission.transmission.bandwidth,
+                                    spreading_factor: transmission.transmission.spreading_factor,
+                                    code_rate: transmission.transmission.code_rate,
+                                    starting_power: Default::default(),
+                                    uplink: false,
+                                    payload: in_answer.clone(),
+                                };
+                                let bytes = serde_json::to_vec(&t).unwrap();
+                                ans_sock.send_to(&bytes, addr).await.unwrap();
+                            }
                             match c.create_uplink(&data, (ans.as_ref().map(|v| v.0.clone())).as_deref(), n_id).await {
                                 Ok(_) =>  {
                                     println!("uplink created successfully");
-                                    if let Some((in_answer, _)) = &ans {
-                                        let t = Transmission {
-                                            start_position: Default::default(),
-                                            start_time: Default::default(),
-                                            frequency: transmission.transmission.frequency,
-                                            bandwidth: transmission.transmission.bandwidth,
-                                            spreading_factor: transmission.transmission.spreading_factor,
-                                            code_rate: transmission.transmission.code_rate,
-                                            starting_power: Default::default(),
-                                            uplink: false,
-                                            payload: in_answer.clone(),
-                                        };
-                                        let bytes = serde_json::to_vec(&t).unwrap();
-                                        ans_sock.send_to(&bytes, addr).await.unwrap();
-                                    }
                                 }, 
                                 Err(e) => {
                                     eprintln!("Error creating uplink with answer: {e:?}")

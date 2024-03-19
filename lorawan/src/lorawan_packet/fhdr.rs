@@ -100,6 +100,14 @@ impl FHDR {
             let mut dev_addr: [u8; 4] = bytes[0..4].try_into()?;
             dev_addr.reverse();
 
+            if let Some(dev) = device_context {
+                if let Some(session) = dev.session() {
+                    if session.network_context().dev_addr() != &dev_addr {
+                        return Err(LoRaWANError::InvalidDevAddr);
+                    }
+                }
+            }
+
             let fctrl = FCtrl::from_bytes(bytes[4], is_uplink);
             let fcnt: u16 = u16::from_le_bytes(bytes[5..7].try_into()?);
             let mut fopts: [u8; 15] = [0; 15];

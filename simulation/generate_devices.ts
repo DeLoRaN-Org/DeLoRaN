@@ -2,7 +2,7 @@ import { appendFile } from 'fs/promises';
 import { randomBytes } from 'crypto'
 
 (async () => {
-    for(let i = 0; i < 2000; i++) {
+    for(let i = 0; i < 10000; i++) {
         let dev_eui = randomBytes(8);
         let join_eui = randomBytes(8);
         let key = randomBytes(16);

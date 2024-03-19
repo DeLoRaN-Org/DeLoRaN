@@ -21,6 +21,7 @@ pub enum LoRaWANError {
     InvalidNonce,
     InvalidBufferLength,
     InvalidBufferContent,
+    InvalidDevAddr,
     MissingDownlink,
 }
 
