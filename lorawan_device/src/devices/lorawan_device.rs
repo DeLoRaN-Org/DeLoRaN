@@ -122,7 +122,7 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
         
         
         self.communicator.send(&join_request, Some(*self.dev_eui()), None).await?;
-        let payloads = self.communicator.receive(Some(Duration::from_secs(20))).await?;
+        let payloads = self.communicator.receive(Some(Duration::from_secs(5))).await?;
         
         //TODO ESTRARRE MEGLIO I PAYLOAD
         let content = payloads.first().ok_or(LoRaWANError::MissingDownlink)?;
