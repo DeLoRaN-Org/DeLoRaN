@@ -10,7 +10,7 @@ use pyo3::{PyAny, Python, Py};
 use pyo3::types::PyModule;
 use tokio::sync::{oneshot, mpsc};
 
-use crate::communicator::{extract_dev_id, CommunicatorError, LoRaPacket, LoRaWANCommunicator, ReceivedTransmission};
+use crate::communicator::{extract_dev_id, CommunicatorError, PyLoRaPacket, LoRaWANCommunicator, ReceivedTransmission};
 use crate::configs::{RadioDeviceConfig, ColosseumDeviceConfig};
 use crate::devices::lorawan_device::LoRaWANDevice;
 
@@ -74,7 +74,7 @@ enum ReceiverReq {
     RegisterDevice(u16)
 }
 
-type Downlinks = (bool, Vec<(u8, LoRaPacket)>);
+type Downlinks = (bool, Vec<(u8, PyLoRaPacket)>);
 enum ReceiverAns {
     ReceiveDownlink(Downlinks),
     RegisterDevice(bool)

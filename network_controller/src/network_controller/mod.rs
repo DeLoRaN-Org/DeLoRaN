@@ -11,7 +11,7 @@ use crate::utils::error::NCError;
 
 #[derive(Clone)]
 pub struct NetworkController {
-    pub n_id: &'static str,
+    pub nc_id: &'static str,
 }
 
 //#[derive(Clone, Serialize, Deserialize)]
@@ -28,13 +28,13 @@ pub struct NetworkControllerUDPConfig {
 }
 
 impl NetworkController {
-    pub fn new(n_id: &'static str) -> Self {
+    pub fn new(nc_id: &'static str) -> Self {
         Self {
-            n_id,
+            nc_id,
         }
     }
 
-    async fn handle_join_request(join_request: &[u8], bc_client: &Arc<impl BlockchainClient>) -> Result<(Vec<u8>, EUI64), NCError> {
+    async fn handle_join_request(join_request: &[u8], bc_client: &Arc<impl BlockchainClient>, nc_id: &'static str) -> Result<(Option<Vec<u8>>, EUI64), NCError> {
         let packet = LoRaWANPacket::from_bytes(join_request, None, true)?;
         if let Payload::JoinRequest(jr_p) = packet.payload() {
             match bc_client.get_device_config(jr_p.dev_eui()).await  {
@@ -81,15 +81,14 @@ impl NetworkController {
                         //println!("{device}");
                         
                         let join_accept = packet.to_bytes_with_context(&device).map_err(NCError::from)?;
+
+                        if bc_client.join_procedure(join_request, &join_accept, nc_id, jr_p.dev_eui()).await? {
+                            println!("I'm the one who must send the join accept");
+                            Ok((Some(join_accept), *device.dev_eui()))
+                        } else {
+                            Ok((None, *device.dev_eui()))
+                        }
                         
-                        //let session = BlockchainDeviceSession::from(device.session().unwrap(), device.dev_eui());
-                        //match bc_client.create_join(&join_request, &join_accept, n_id).await {
-                        //    Ok(_) =>  {
-                        //        println!("Created device session successfully for device {}", PrettyHexSlice(&session.dev_addr));
-                        //    },
-                        //    Err(_) => println!("Error updating counter"),
-                        //} //TODO tempo di risposta ottimo, upload della join dopo  ma chissà se si rischia di rompere qualcosa così
-                        Ok((join_accept, *device.dev_eui()))
                     }
                 }
             }
@@ -159,10 +158,17 @@ impl NetworkController {
         Ok((data_down, *device.dev_eui()))
     }
     
-    async fn dispatch_task(mhdr: &MHDR, buf: &[u8], bc_client: &Arc<impl BlockchainClient>) -> Result<Option<(Vec<u8>, EUI64)>, NCError> {
+    async fn dispatch_task(mhdr: &MHDR, buf: &[u8], bc_client: &Arc<impl BlockchainClient>, nc_id: &'static str) -> Result<Option<(Vec<u8>, EUI64)>, NCError> {
         match mhdr.mtype() {
             MType::JoinRequest => {
-                Ok(Some(Self::handle_join_request(buf, bc_client).await?))
+                match Self::handle_join_request(buf, bc_client, nc_id).await? {
+                    (Some(join_accept), dev_eui) => {
+                        Ok(Some((join_accept, dev_eui)))
+                    },
+                    (None, _dev_eui) => {
+                        Ok(None)
+                    }
+                }
             },
             MType::UnconfirmedDataUp => {
                 Self::handle_unconfirmed_data_up(buf, bc_client).await?;
@@ -187,7 +193,7 @@ impl NetworkController {
         }
     }
 
-    async fn communicator_routine<LC,BC>(config: &'static LC::Config, n_id: &'static str, blockchain_config: &BC::Config) 
+    async fn communicator_routine<LC,BC>(config: &'static LC::Config, nc_id: &'static str, blockchain_config: &BC::Config) 
     where LC: LoRaWANCommunicator + Sync + Send + 'static, 
           BC: BlockchainClient + 'static { //TODO too many statics? maybe not
 
@@ -205,20 +211,21 @@ impl NetworkController {
                             let cc = Arc::clone(&communicator);
     
                             tokio::spawn(async move {
-                                let answer = Self::dispatch_task(&mhdr, &packet.transmission.payload, &client_clone).await;
-                                match answer {
+                                match Self::dispatch_task(&mhdr, &packet.transmission.payload, &client_clone, nc_id).await {
                                     Ok(ans) => {
                                         if let Some((in_answer, dest)) = &ans {
                                             cc.send(in_answer, None, Some(*dest)).await.unwrap();
                                         }
-                                        match client_clone.create_uplink(&packet.transmission.payload, (ans.map(|v| v.0)).as_deref(), n_id).await {
-                                            Ok(_) =>  {
-                                                println!("uplink created successfully");
-                                            }, 
-                                            Err(e) => {
-                                                eprintln!("Error creating uplink with answer: {e:?}")
-                                            },
-                                        };
+                                        if mhdr.mtype() != MType::JoinRequest {
+                                            match client_clone.create_uplink(&packet.transmission.payload, ans.as_ref().map(|(in_ans, _)| in_ans.as_slice())).await {
+                                                Ok(_) =>  {
+                                                    println!("uplink created successfully");
+                                                }, 
+                                                Err(e) => {
+                                                    eprintln!("Error creating uplink with answer: {e:?}")
+                                                },
+                                            };
+                                        }
                                     },
                                     Err(e) => eprintln!("Packet {}: {e:?}", PrettyHexSlice(&packet.transmission.payload)),
                                 }
@@ -234,8 +241,9 @@ impl NetworkController {
         }
     }
 
-    pub fn udp_routine<BC>(&self, config: &'static UDPNCConfig, blockchain_config: &BC::Config) -> JoinHandle<()> where BC: BlockchainClient + 'static  {
-        let n_id: &str = self.n_id;
+    pub fn udp_routine<BC>(&self, config: &'static UDPNCConfig, blockchain_config: &BC::Config) -> JoinHandle<()> 
+    where BC: BlockchainClient + 'static  {
+        let nc_id: &str = self.nc_id;
         //let m = self.mpsc_tx.clone();
         let c = blockchain_config.clone();
 
@@ -255,34 +263,33 @@ impl NetworkController {
                 tokio::spawn(async move {
                     let data = &transmission.transmission.payload;
                     let mhdr = MHDR::from_bytes(data[0]);
-                    let answer = Self::dispatch_task(&mhdr, &data, &c).await;
-                    match answer {
+                    match Self::dispatch_task(&mhdr, data, &c, nc_id).await {
                         Ok(ans) => {
                             if let Some((in_answer, _)) = &ans {
                                 let t = Transmission {
-                                    start_position: Default::default(),
-                                    start_time: Default::default(),
                                     frequency: transmission.transmission.frequency,
                                     bandwidth: transmission.transmission.bandwidth,
                                     spreading_factor: transmission.transmission.spreading_factor,
                                     code_rate: transmission.transmission.code_rate,
-                                    starting_power: Default::default(),
                                     uplink: false,
                                     payload: in_answer.clone(),
+                                    ..Default::default()
                                 };
                                 let bytes = serde_json::to_vec(&t).unwrap();
                                 ans_sock.send_to(&bytes, addr).await.unwrap();
                             }
-                            match c.create_uplink(&data, (ans.as_ref().map(|v| v.0.clone())).as_deref(), n_id).await {
-                                Ok(_) =>  {
-                                    println!("uplink created successfully");
-                                }, 
-                                Err(e) => {
-                                    eprintln!("Error creating uplink with answer: {e:?}")
-                                },
-                            };
+                            if mhdr.mtype() != MType::JoinRequest {
+                                match c.create_uplink(data, ans.as_ref().map(|(in_ans, _)| in_ans.as_slice())).await {
+                                    Ok(_) =>  {
+                                        println!("uplink created successfully");
+                                    }, 
+                                    Err(e) => {
+                                        eprintln!("Error creating uplink with answer: {e:?}")
+                                    },
+                                };
+                            }
                         },
-                        Err(e) => eprintln!("Packet {}: {e:?}", PrettyHexSlice(&data)),
+                        Err(e) => eprintln!("Packet {}: {e:?}", PrettyHexSlice(data)),
                     };
                 });
             };
@@ -292,19 +299,19 @@ impl NetworkController {
     pub fn routine<LC,BC>(&self, config: &'static LC::Config, bc_config: &'static BC::Config) -> JoinHandle<()> 
     where LC: LoRaWANCommunicator + 'static, BC: BlockchainClient + 'static {
 
-        let n_id = self.n_id;
+        let nc_id = self.nc_id;
 
         tokio::spawn(async move {
-            // Self::handle_colosseum_connection(mpsc_tx_clone, colosseum_config, n_id).await
-            //Self::communicator_routine::<ColosseumCommunicator, BlockchainMockClient>(mpsc_tx_clone, colosseum_config, n_id, BlockchainMockClientConfig).await
-            Self::communicator_routine::<LC, BC>(config, n_id, bc_config).await
+            // Self::handle_colosseum_connection(mpsc_tx_clone, colosseum_config, nc_id).await
+            //Self::communicator_routine::<ColosseumCommunicator, BlockchainMockClient>(mpsc_tx_clone, colosseum_config, nc_id, BlockchainMockClientConfig).await
+            Self::communicator_routine::<LC, BC>(config, nc_id, bc_config).await
         })
     }
 }
 
 
 /*
-async fn handle_colosseum_connection(mpsc_tx: MpscSender<CommandWrapper>, colosseum_config: &'static ColosseumDeviceConfig, n_id: &'static str) {
+async fn handle_colosseum_connection(mpsc_tx: MpscSender<CommandWrapper>, colosseum_config: &'static ColosseumDeviceConfig, nc_id: &'static str) {
         let client = Arc::new(BlockchainExeClient::new("orderer1.orderers.dlwan.phd:6050", "lorawan", "lorawan", None));
         let radio_communicator = Arc::new(*ColosseumCommunicator::from_config(colosseum_config).unwrap());
 
@@ -327,7 +334,7 @@ async fn handle_colosseum_connection(mpsc_tx: MpscSender<CommandWrapper>, coloss
                                     if let Some((in_answer, dest)) = &ans {
                                         r.send_uplink(in_answer, None, Some(*dest)).await.unwrap();
                                     }
-                                    match c.create_uplink(&packet.payload, (ans.map(|v| v.0)).as_deref(), n_id).await {
+                                    match c.create_uplink(&packet.payload, (ans.map(|v| v.0)).as_deref(), nc_id).await {
                                         Ok(_) =>  {
                                             println!("uplink created successfully");
                                         }, 
@@ -350,7 +357,7 @@ async fn handle_colosseum_connection(mpsc_tx: MpscSender<CommandWrapper>, coloss
         }
     }
     
-    async fn handle_radio_connection(mpsc_tx: MpscSender<CommandWrapper>, radio_config: &'static RadioDeviceConfig, n_id: &'static str) {
+    async fn handle_radio_connection(mpsc_tx: MpscSender<CommandWrapper>, radio_config: &'static RadioDeviceConfig, nc_id: &'static str) {
         let client = Arc::new(BlockchainExeClient::new("orderer1.orderers.dlwan.phd:6050", "lorawan", "lorawan", None));
         let radio_communicator = Arc::new(*RadioCommunicator::from_config(radio_config).unwrap());
         loop {
@@ -372,7 +379,7 @@ async fn handle_colosseum_connection(mpsc_tx: MpscSender<CommandWrapper>, coloss
                                     if let Some((in_answer, dest)) = &ans {
                                         radio_clone.send_uplink(in_answer, None, Some(*dest)).await.unwrap();
                                     }
-                                    match client_clone.create_uplink(&packet.payload, (ans.map(|v| v.0)).as_deref(), n_id).await {
+                                    match client_clone.create_uplink(&packet.payload, (ans.map(|v| v.0)).as_deref(), nc_id).await {
                                         Ok(_) =>  {
                                             println!("uplink created successfully");
                                         }, 

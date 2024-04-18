@@ -22,7 +22,7 @@ use lorawan::{
 };
 use network_controller::network_controller::NetworkController;
 use serde::{Deserialize, Serialize};
-use blockchain_api::exec_bridge::{BlockchainExeConfig, BlockchainExeClient};
+use blockchain_api::udp_bridge::{BlockchainUDPClient, BlockchainUDPConfig};
 
 use crate::device::device_main;
 
@@ -40,7 +40,7 @@ struct Args {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NetworkControllerConfig {
-    pub n_id: String,
+    pub nc_id: String,
     pub orderer_address: String,
     udp_config: Option<UDPNCConfig>,
     radio_config: Option<RadioDeviceConfig>,
@@ -75,7 +75,7 @@ impl Config {
 
 async fn network_controller_main(config: &'static NetworkControllerConfig) {
     let nc = NetworkController::new(
-        config.n_id.as_ref(),
+        config.nc_id.as_ref(),
     );
 
     lazy_static!(
@@ -85,18 +85,22 @@ async fn network_controller_main(config: &'static NetworkControllerConfig) {
         .unwrap();
 
 
-        static ref BC_CONFIG: BlockchainExeConfig = BlockchainExeConfig {
-            orderer_addr: CONFIG.network_controller.as_ref().unwrap().orderer_address.clone(),
-            channel_name: "lorawan".to_string(),
-            chaincode_name: "lorawan".to_string(),
-            orderer_ca_file_path: None,
+        //static ref BC_CONFIG: BlockchainExeConfig = BlockchainExeConfig {
+        //    orderer_addr: CONFIG.network_controller.as_ref().unwrap().orderer_address.clone(),
+        //    channel_name: "lorawan".to_string(),
+        //    chaincode_name: "lorawan".to_string(),
+        //    orderer_ca_file_path: None,
+        //};
+        
+        static ref BC_CONFIG: BlockchainUDPConfig = BlockchainUDPConfig {
+            port: 9999
         };
     );
 
-    let t1 = config.colosseum_config.as_ref().map(|colosseum_config| nc.routine::<ColosseumCommunicator, BlockchainExeClient>(colosseum_config, &BC_CONFIG));
-    let t2 = config.radio_config.as_ref().map(|radio_config| nc.routine::<RadioCommunicator, BlockchainExeClient>(radio_config, &BC_CONFIG));
-    //let t3 = config.tcp_config.as_ref().map(|tcp_config| nc.tcp_routine::<BlockchainExeClient>(tcp_config, &BC_CONFIG));
-    let t3 = config.udp_config.as_ref().map(|udp_config| nc.udp_routine::<BlockchainExeClient>(udp_config, &BC_CONFIG));
+    let t1 = config.colosseum_config.as_ref().map(|colosseum_config| nc.routine::<ColosseumCommunicator, BlockchainUDPClient>(colosseum_config, &BC_CONFIG));
+    let t2 = config.radio_config.as_ref().map(|radio_config| nc.routine::<RadioCommunicator, BlockchainUDPClient>(radio_config, &BC_CONFIG));
+    //let t3 = config.tcp_config.as_ref().map(|tcp_config| nc.tcp_routine::<BlockchainUDPClient>(tcp_config, &BC_CONFIG));
+    let t3 = config.udp_config.as_ref().map(|udp_config| nc.udp_routine::<BlockchainUDPClient>(udp_config, &BC_CONFIG));
 
     if let Some(t) = t1 { t.await.unwrap(); }
     if let Some(t) = t2 { t.await.unwrap(); }
@@ -151,7 +155,7 @@ async fn main() -> Result<(), std::io::Error> {
             configuration: create_initialized_device(),
         }),
         network_controller: Some(NetworkControllerConfig {
-            n_id: "ns_test_1".to_string(),
+            nc_id: "ns_test_1".to_string(),
             orderer_address: "orderer1.orderers.dlwan.phd".to_string(),
             udp_config: Some(UDPNCConfig { 
                 addr: "0.0.0.0".to_string(), 

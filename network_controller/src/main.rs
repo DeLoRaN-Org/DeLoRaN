@@ -26,7 +26,7 @@ async fn main() -> Result<(), std::io::Error> {
     let _args = Args::parse();
 
     lazy_static! {
-        static ref N_ID: String = String::from("nc_test_1");
+        static ref NC_ID: String = String::from("nc_test_1");
         //static ref TCP_CONFIG: NetworkControllerTCPConfig = NetworkControllerTCPConfig {
         //    tcp_dev_port: 9090,
         //    tcp_nc_port: 9091
@@ -60,7 +60,7 @@ async fn main() -> Result<(), std::io::Error> {
         };
     }
 
-    let nc = NetworkController::new(&N_ID);
+    let nc = NetworkController::new(&NC_ID);
     let colosseum_routine = nc.routine::<ColosseumCommunicator, BlockchainExeClient>(
         &COLOSSEUM_CONFIG,
         &BC_CONFIG,

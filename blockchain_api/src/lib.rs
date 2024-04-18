@@ -2,6 +2,7 @@ pub mod exec_bridge;
 pub mod http_bridge;
 pub mod mock_bridge;
 pub mod convergence;
+pub mod udp_bridge;
 
 
 use std::fmt::Display;
@@ -86,7 +87,8 @@ pub struct BlockchainDeviceSession {
     pub nwk_s_enc_key: Key,
     pub owner: String,
     pub rj_count0: u16,
-    pub snwk_s_int_key: Key
+    pub snwk_s_int_key: Key,
+    pub nc_ids: Vec<String>,
 }
 
 impl From<BlockchainDeviceSession> for SessionContext {
@@ -121,7 +123,8 @@ impl BlockchainDeviceSession {
             app_s_key: *s.application_context().app_s_key(),
             af_cnt_dwn: s.application_context().af_cnt_dwn(),
             dev_eui: *dev_eui,
-            owner: "".to_owned(), //TODO FIXME
+            owner: "".to_owned(), //TODO unknown
+            nc_ids: vec![],       //TODO unknown
         }
     }
 }
@@ -168,6 +171,7 @@ pub struct BlockchainState {
 #[derive(Debug)]
 pub enum BlockchainError {
     GenericError(String),
+    Error(&'static str),
     MissingContent,
     JSONParsingError,
 }
@@ -175,6 +179,7 @@ pub enum BlockchainError {
 impl Display for BlockchainError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            BlockchainError::Error(e) => write!(f, "BE::Error: {}", e),
             BlockchainError::GenericError(e) => write!(f, "BE::GenericError: {}", e),
             BlockchainError::MissingContent => write!(f, "BE::MissingContent"),
             BlockchainError::JSONParsingError => write!(f, "BE::JSONParsingError"),
@@ -196,7 +201,8 @@ pub trait BlockchainClient: Send + Sync {
     async fn create_device_config(&self, device: &Device) -> Result<(), BlockchainError>;
     async fn delete_device(&self, dev_eui: &EUI64) -> Result<(), BlockchainError>;
     async fn delete_device_session(&self, dev_addr: &[u8; 4]) -> Result<(), BlockchainError>;
-    async fn create_uplink(&self, packet: &[u8], answer: Option<&[u8]>, n_id: &str) -> Result<(),BlockchainError>;
+    async fn create_uplink(&self, packet: &[u8], answer: Option<&[u8]>) -> Result<(),BlockchainError>;
+    async fn join_procedure(&self, join_request: &[u8], join_accept: &[u8], nc_id: &str, dev_id: &EUI64) -> Result<bool,BlockchainError>;
     async fn get_packet(&self, hash: &str) -> Result<BlockchainPacket,BlockchainError>;
     async fn get_public_blockchain_state(&self) -> Result<BlockchainState, BlockchainError>;
     async fn get_device_org(&self, dev_id: &[u8]) -> Result<String, BlockchainError>;
@@ -217,7 +223,8 @@ pub trait BlockchainClientSync: Send + Sync {
     fn create_device_config(&self, device: &Device) -> Result<(), BlockchainError>;
     fn delete_device(&self, dev_eui: &EUI64) -> Result<(), BlockchainError>;
     fn delete_device_session(&self, dev_addr: &[u8; 4]) -> Result<(), BlockchainError>;
-    fn create_uplink(&self, packet: &[u8], answer: Option<&[u8]>, n_id: &str) -> Result<(),BlockchainError>;
+    fn create_uplink(&self, packet: &[u8], answer: Option<&[u8]>, nc_id: &str) -> Result<(),BlockchainError>;
+    fn join_procedure(&self, join_request: &[u8], join_accept: &[u8], nc_id: &str, dev_id: &[u8]) -> Result<bool,BlockchainError>;
     fn get_packet(&self, hash: &str) -> Result<BlockchainPacket,BlockchainError>;
     fn get_public_blockchain_state(&self) -> Result<BlockchainState, BlockchainError>;
     fn get_device_org(&self, dev_id: &[u8]) -> Result<String, BlockchainError>;

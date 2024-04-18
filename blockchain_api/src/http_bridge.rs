@@ -148,7 +148,7 @@ impl crate::BlockchainClient for BlockchainHTTPClient {
     async fn create_device_config(&self, device: &Device) -> Result<(), BlockchainError> {
         let jbody = json!({
             "device": device,
-            "n_id": 1
+            "nc_id": 1
         });
 
         let mut headers = HeaderMap::new();
@@ -218,11 +218,14 @@ impl crate::BlockchainClient for BlockchainHTTPClient {
             }
         }
     }
+
+    async fn join_procedure(&self, _join_request: &[u8], _join_accept: &[u8], _nc_id: &str, _dev_eui: &EUI64) -> Result<bool,BlockchainError> {
+        unimplemented!("Not implemented because deprecated")
+    }
     
-    async fn create_uplink(&self, packet: &[u8], answer: Option<&[u8]>, n_id: &str) -> Result<(),BlockchainError> {
+    async fn create_uplink(&self, packet: &[u8], answer: Option<&[u8]>) -> Result<(),BlockchainError> {
         let mut jbody = json!({
             "packet": PrettyHexSlice(packet).to_string(),
-            "n_id" : n_id,
             "date": format!("{}",SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis())
         });
 

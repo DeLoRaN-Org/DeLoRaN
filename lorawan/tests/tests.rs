@@ -450,7 +450,7 @@ mod tests {
         });
         let fhdr = FHDR::new(*session.network_context().dev_addr(), fctrl);
 
-        let list = vec![
+        let list = [
             EDMacCommands::ResetInd(1),
             EDMacCommands::DeviceTimeReq,
             EDMacCommands::RXParamSetupAns {
@@ -501,7 +501,7 @@ mod tests {
         });
         let fhdr = FHDR::new(*session.network_context().dev_addr(), fctrl);
 
-        let list = vec![NCMacCommands::NewChannelReq {
+        let list = [NCMacCommands::NewChannelReq {
             ch_index: 1,
             freq: 878000,
             max_dr: 3,
@@ -671,7 +671,7 @@ mod tests {
 
     #[test]
     fn from_bytes_edcommands() {
-        let _list = vec![
+        let _list = [
             EDMacCommands::ResetInd(1),
             EDMacCommands::DeviceTimeReq,
             EDMacCommands::RXParamSetupAns {

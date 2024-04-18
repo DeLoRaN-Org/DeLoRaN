@@ -1,6 +1,6 @@
 {
     "network_controller": {
-        "n_id": "ns_test_1",
+        "nc_id": "ns_test_1",
         "colosseum_config": {
             "radio_config": {
                 "region": "EU863_870",

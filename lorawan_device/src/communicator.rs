@@ -71,7 +71,7 @@ impl From<std::io::Error> for CommunicatorError {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct LoRaPacket {
+pub struct PyLoRaPacket {
     pub payload: Vec<u8>,
     pub src: u16,
     pub dst: u16,
@@ -87,7 +87,7 @@ pub struct LoRaPacket {
     pub snr: f32,
 }
 
-impl<'source> FromPyObject<'source> for LoRaPacket {
+impl<'source> FromPyObject<'source> for PyLoRaPacket {
     fn extract(ob: &'source PyAny) -> PyResult<Self> {
         Ok(Self {
             payload: ob.getattr("payload")?.extract()?,
@@ -187,7 +187,7 @@ impl Transmission {
         let v1 = (num / den).ceil() * (cr as f32 + 4.0);
 
         let payload_symb_nb = 8.0 + (if v1 > 0.0 { v1 } else { 0.0 });
-        let tpayload = (payload_symb_nb as f32) * tsym;
+        let tpayload = payload_symb_nb * tsym;
         (tpream + tpayload).round() as u128
     }
 
@@ -216,8 +216,8 @@ impl ReceivedTransmission {
 }
 
 
-impl From<LoRaPacket> for ReceivedTransmission {
-    fn from(packet: LoRaPacket) -> Self {
+impl From<PyLoRaPacket> for ReceivedTransmission {
+    fn from(packet: PyLoRaPacket) -> Self {
         Self {
             transmission: Transmission {
                 start_position: Position { x: 0.0, y: 0.0, z: 0.0 },

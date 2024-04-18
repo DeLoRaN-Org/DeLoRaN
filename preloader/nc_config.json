@@ -1,6 +1,6 @@
 {
     "network_controller": {
-        "n_id": "ns_test_1",
+        "nc_id": "peer0.org1.dlwan.phd",
         "orderer_address": "orderer1.orderers.dlwan.phd:6050",
         "udp_config": {
             "addr": "0.0.0.0",

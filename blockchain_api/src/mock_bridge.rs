@@ -194,9 +194,12 @@ impl BlockchainClient for BlockchainMockClient {
         &self,
         _packet: &[u8],
         _answer: Option<&[u8]>,
-        _n_id: &str,
     ) -> Result<(), BlockchainError> {
         Ok(())
+    }
+
+    async fn join_procedure(&self, _join_request: &[u8], _join_accept: &[u8], _nc_id: &str, _dev_eui: &EUI64) -> Result<bool,BlockchainError> {
+        Ok(true)
     }
 
     async fn get_packet(&self, hash: &str) -> Result<BlockchainPacket, BlockchainError> {
