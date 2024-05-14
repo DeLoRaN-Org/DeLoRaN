@@ -30,7 +30,6 @@ pub struct BlockchainTCPConfig {
     port: u16,
 }
 
-#[async_trait::async_trait]
 impl crate::BlockchainClient for BlockchainHTTPClient { 
     type Config = BlockchainTCPConfig;
 

@@ -9,7 +9,7 @@ pub struct LoRaWANDevice<T>
 where T: LoRaWANCommunicator + Send + Sync {
     device: Device,
     communicator: T,
-    //config: DeviceConfig,
+    //config: T::Config,
 }
 
 impl<T: LoRaWANCommunicator + Send + Sync> From<LoRaWANDevice<T>> for (Device, T) {
@@ -19,7 +19,7 @@ impl<T: LoRaWANCommunicator + Send + Sync> From<LoRaWANDevice<T>> for (Device, T
 }
 
 impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
-    pub fn new(device: Device, communicator: T/*, config: DeviceConfig*/) -> Self {
+    pub fn new(device: Device, communicator: T/*, config: T::Config */) -> Self {
         Self {
             device, communicator//, config
         }
@@ -122,7 +122,7 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
         
         
         self.communicator.send(&join_request, Some(*self.dev_eui()), None).await?;
-        let payloads = self.communicator.receive(Some(Duration::from_secs(5))).await?;
+        let payloads = self.communicator.receive(Some(Duration::from_secs(6))).await?;
         
         //TODO ESTRARRE MEGLIO I PAYLOAD
         let content = payloads.first().ok_or(LoRaWANError::MissingDownlink)?;
@@ -170,13 +170,6 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
         let increment_higher_half_dev_nonce = if nonce_looped { 0x00010000 } else { 0 };
         received_nonce as u32 | ((current_nonce & 0xffff0000) + increment_higher_half_dev_nonce)
     }
-
-
-    //pub fn extract_config(&self) -> serde_json::Value {
-    //    json!({
-    //        "device": self.config
-    //    })
-    //}
 }
 
 impl <T> Deref for LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {

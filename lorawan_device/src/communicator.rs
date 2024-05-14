@@ -2,7 +2,6 @@ use std::{hash::Hash, time::{Duration, SystemTime, UNIX_EPOCH}};
 
 use pyo3::prelude::*;
 
-use async_trait::async_trait;
 use lorawan::{
     physical_parameters::{LoRaBandwidth, CodeRate, SpreadingFactor},
     utils::{errors::LoRaWANError, eui::EUI64},
@@ -39,23 +38,22 @@ pub enum CommunicatorError {
     LoRaWANError(LoRaWANError),
 }
 
-#[async_trait]
 pub trait LoRaWANCommunicator: Send + Sync + Sized {
     type Config: Send + Sync;
     
-    async fn from_config(config: &Self::Config) -> Result<Self, CommunicatorError>;
+    fn from_config(config: &Self::Config) -> impl std::future::Future<Output = Result<Self, CommunicatorError>> + Send;
     
-    async fn send(
+    fn send(
         &self,
         bytes: &[u8],
         src: Option<EUI64>,
         dest: Option<EUI64>,
-    ) -> Result<(), CommunicatorError>;
+    ) -> impl std::future::Future<Output = Result<(), CommunicatorError>> + Send;
 
-    async fn receive(
+    fn receive(
         &self,
         timeout: Option<Duration>,
-    ) -> Result<Vec<ReceivedTransmission>, CommunicatorError>;
+    ) -> impl std::future::Future<Output = Result<Vec<ReceivedTransmission>, CommunicatorError>> + Send;
 }
 
 impl From<LoRaWANError> for CommunicatorError {
@@ -146,7 +144,12 @@ pub struct Transmission {
 
 impl PartialEq for Transmission {
     fn eq(&self, other: &Self) -> bool {
-        self.start_time == other.start_time && self.bandwidth == other.bandwidth && self.spreading_factor == other.spreading_factor && self.code_rate == other.code_rate && self.uplink == other.uplink && self.payload == other.payload
+        self.start_time == other.start_time && 
+        self.bandwidth == other.bandwidth && 
+        self.spreading_factor == other.spreading_factor && 
+        self.code_rate == other.code_rate && 
+        self.uplink == other.uplink && 
+        self.payload == other.payload
     }
 }
 
@@ -214,7 +217,6 @@ impl ReceivedTransmission {
         self.transmission.time_on_air()
     }
 }
-
 
 impl From<PyLoRaPacket> for ReceivedTransmission {
     fn from(packet: PyLoRaPacket) -> Self {

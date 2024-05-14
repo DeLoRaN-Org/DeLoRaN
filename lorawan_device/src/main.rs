@@ -6,6 +6,8 @@ use lorawan::{device::{Device, DeviceClass, LoRaWANVersion}, encryption::key::Ke
 use serde::{Serialize, Deserialize};
 use serde_json::json;
 
+
+
 #[allow(non_snake_case)]
 #[derive(Serialize)]
 struct BlockchainArgs {
@@ -197,8 +199,36 @@ async fn main() {
 mod test {
     use core::panic;
 
-    use lorawan::{device::{Device, DeviceClass, LoRaWANVersion, session_context::{NetworkSessionContext, ApplicationSessionContext, SessionContext}}, utils::eui::EUI64, encryption::key::Key, lorawan_packet::LoRaWANPacket};
-    use  lorawan_device::{devices::lorawan_device::LoRaWANDevice, devices::mock_device::MockCommunicator, devices::debug_device::DebugDevice};
+    use lorawan::{device::{session_context::{ApplicationSessionContext, NetworkSessionContext, SessionContext}, Device, DeviceClass, LoRaWANVersion}, encryption::key::Key, lorawan_packet::LoRaWANPacket, physical_parameters::{CodeRate, LoRaBandwidth, SpreadingFactor}, utils::eui::EUI64};
+    use  lorawan_device::{communicator::{ArrivalStats, Position, ReceivedTransmission, Transmission}, devices::{debug_device::DebugDevice, lorawan_device::LoRaWANDevice, mock_device::MockCommunicator}};
+
+    #[test]
+    fn print_transmission() {
+        let transmission = ReceivedTransmission {
+            transmission: Transmission {
+                start_position: Position {
+                    x: 1.2,
+                    y: 3.4,
+                    z: 5.6,
+                },
+                start_time: 1234567890,
+                frequency: 868_000_000.0,
+                bandwidth: LoRaBandwidth::BW125,
+                spreading_factor: SpreadingFactor::SF7,
+                code_rate: CodeRate::CR4_5,
+                starting_power: 14.0,
+                uplink: true,
+                payload: vec![1,2,3,4,5,6,7],
+            },
+            arrival_stats: ArrivalStats {
+                time: 1234567890,
+                rssi: -20.0,
+                snr: 20.0,
+            },
+        };
+
+        println!("{}", serde_json::to_string_pretty(&transmission).unwrap());
+    }
 
 
     fn create_initialized_device() -> Device {
@@ -236,8 +266,7 @@ mod test {
 
     #[tokio::test]
     async fn test() {
-        let mut ld = DebugDevice::from(LoRaWANDevice::new(create_initialized_device(), MockCommunicator));
-        
+        let mut ld = DebugDevice::from(LoRaWANDevice::new(create_initialized_device(), MockCommunicator));         
         for _ in 0..1000 {
             let uplink = ld.create_uplink(Some("###  confirmed 5 message  ###".as_bytes()), false, Some(1), None).unwrap();
     

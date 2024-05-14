@@ -19,6 +19,14 @@
             },
             "address": "192.168.40.2",
             "sdr_code": "./src/sdr-lora-merged.py"
+        },
+        "consensus_config": {
+            "addr": "0.0.0.0:5050",
+            "certs": {
+                "cert_path": "/opt/fabric/crypto/peer/tls/server.crt",
+                "key_path": "/opt/fabric/crypto/peer/tls/server.key",
+                "ca_cert_path": "/opt/fabric/crypto/peer/tls/ca.crt"
+            }
         }
     }
 }

@@ -1,7 +1,6 @@
 use rand::RngCore;
 use std::{net::{IpAddr, Ipv4Addr}, vec};
 
-use async_trait::async_trait;
 use lorawan::{
     device::{
         session_context::{ApplicationSessionContext, NetworkSessionContext, SessionContext},
@@ -134,7 +133,6 @@ impl BlockchainMockClient {
 #[derive(Default, Clone)]
 pub struct BlockchainMockClientConfig;
 
-#[async_trait]
 impl BlockchainClient for BlockchainMockClient {
     type Config = BlockchainMockClientConfig;
 

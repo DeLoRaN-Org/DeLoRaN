@@ -1,12 +1,11 @@
 use std::time::Duration;
 
-use async_trait::async_trait;
 use blockchain_api::{exec_bridge::BlockchainExeClient, BlockchainClient};
 use lorawan::{device::Device, utils::eui::EUI64};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
-    sync::Mutex,
+    net::{tcp::{OwnedReadHalf, OwnedWriteHalf}, TcpStream},
+    sync::{Mutex, RwLock},
 };
 
 use lorawan::utils::errors::LoRaWANError;
@@ -14,11 +13,9 @@ use lorawan::utils::errors::LoRaWANError;
 use crate::{
     communicator::{CommunicatorError, LoRaWANCommunicator, ReceivedTransmission, Transmission},
     configs::TcpDeviceConfig,
-    devices::lorawan_device::LoRaWANDevice,
+    devices::lorawan_device::LoRaWANDevice, split_communicator::{LoRaReceiver, LoRaSender, SplitCommunicator},
 };
 
-
-#[deprecated(note="Use lorawan_device::devices::udp_device::UdpDevice instead")]
 pub struct TcpDevice;
 impl TcpDevice {
     pub async fn create(
@@ -59,7 +56,6 @@ impl TcpDevice {
     }
 }
 
-#[deprecated(note="Use lorawan_device::devices::udp_device::UdpCommunicator instead")]
 pub struct TCPCommunicator {
     stream: Mutex<TcpStream>,
 }
@@ -72,7 +68,6 @@ impl From<TcpStream> for TCPCommunicator {
     }
 }
 
-#[async_trait]
 impl LoRaWANCommunicator for TCPCommunicator {
     type Config = TcpDeviceConfig;
 
@@ -85,7 +80,7 @@ impl LoRaWANCommunicator for TCPCommunicator {
         })
     }
 
-    async fn send_uplink(
+    async fn send(
         &self,
         bytes: &[u8],
         _src: Option<EUI64>,
@@ -95,7 +90,7 @@ impl LoRaWANCommunicator for TCPCommunicator {
         Ok(stream.write_all(bytes).await?)
     }
 
-    async fn receive_downlink(
+    async fn receive(
         &self,
         timeout: Option<Duration>,
     ) -> Result<Vec<ReceivedTransmission>, CommunicatorError> {
@@ -125,5 +120,57 @@ impl LoRaWANCommunicator for TCPCommunicator {
             ..Default::default()
         };
         Ok(vec![packet])
+    }
+}
+
+
+pub struct TcpSender {
+    inner: RwLock<OwnedWriteHalf>,
+}
+
+impl LoRaSender for TcpSender {
+    type OptionalInfo = ();
+    async fn send(&self, bytes: &[u8], _optional_info: Option<Self::OptionalInfo>) -> Result<(), CommunicatorError> {
+        self.inner.write().await.write_all(bytes).await?;
+        Ok(())
+    }
+}
+
+pub struct TcpReceiver {
+    inner: RwLock<OwnedReadHalf>,
+}
+
+impl LoRaReceiver for TcpReceiver {
+    async fn receive(&self, _timeout: Option<Duration>) -> Result<Vec<ReceivedTransmission>, CommunicatorError> {
+        let mut buf = Vec::with_capacity(256);
+        self.inner.write().await.read_buf(&mut buf).await?;
+        let packet = ReceivedTransmission {
+            transmission: Transmission {
+                payload: buf,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        Ok(vec![packet])
+    }
+}
+
+impl SplitCommunicator for TCPCommunicator {
+    type Sender = TcpSender;
+    type Receiver = TcpReceiver;
+
+    async fn split_communicator(self) -> Result<(Self::Sender, Self::Receiver), CommunicatorError> {
+        let (r, w) = {
+            let stream = self.stream.into_inner();
+            stream.into_split()
+        };
+        Ok((
+            TcpSender {
+                inner: RwLock::new(w),
+            },
+            TcpReceiver {
+                inner: RwLock::new(r),
+            },
+        ))
     }
 }

@@ -1,6 +1,7 @@
 use std::io::Error;
 
 use blockchain_api::BlockchainError;
+use consensus::ConsensusError;
 use lorawan::utils::errors::LoRaWANError;
 use tokio::sync::oneshot::error::RecvError;
 
@@ -18,7 +19,8 @@ pub enum NCError {
     UnknownDevAddr([u8; 4]),
     LoRaWANError(LoRaWANError),
 
-    BlockchainError(BlockchainError)
+    BlockchainError(BlockchainError),
+    ConsensusError(ConsensusError),
 }
 
 impl From<BlockchainError> for NCError {

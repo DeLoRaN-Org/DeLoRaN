@@ -106,6 +106,10 @@ impl MHDR {
 
         MHDR::new(mtype, major)
     }
+
+    pub fn is_join_rejoin(&self) -> bool {
+        self.mtype == MType::JoinRequest || self.mtype == MType::RejoinRequest
+    }
 }
 
 impl ToBytes for MHDR {

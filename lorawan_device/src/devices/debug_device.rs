@@ -4,10 +4,8 @@ use std::{
 };
 
 use crate::{
-    communicator::{CommunicatorError, LoRaWANCommunicator, ReceivedTransmission},
-    devices::lorawan_device::LoRaWANDevice,
+    communicator::{CommunicatorError, LoRaWANCommunicator, ReceivedTransmission}, split_communicator::{LoRaReceiver, LoRaSender, SplitCommunicator}, devices::lorawan_device::LoRaWANDevice
 };
-use async_trait::async_trait;
 use blockchain_api::{exec_bridge::BlockchainExeClient, BlockchainClient};
 use lorawan::{
     device::Device,
@@ -21,7 +19,7 @@ impl DebugDevice {
         communicator: T,
     ) -> LoRaWANDevice<DebugCommunicator<T>> {
         LoRaWANDevice::new(device, DebugCommunicator {
-            communicator,
+            inner: communicator,
             id: None
         })
     }
@@ -38,7 +36,7 @@ impl DebugDevice {
         );
         let device = client.get_device(dev_eui).await.unwrap();
         LoRaWANDevice::new(device, DebugCommunicator {
-            communicator,
+            inner: communicator,
             id: None
         })
     }
@@ -47,14 +45,14 @@ impl DebugDevice {
         let (device, communicator) = d.into();
         let id = Some(*device.dev_eui());
         LoRaWANDevice::new(device, DebugCommunicator {
-            communicator,
+            inner: communicator,
             id
         })
     }
 }
 
 pub struct DebugCommunicator<T: LoRaWANCommunicator> {
-    communicator: T,
+    inner: T,
     id: Option<EUI64>
 }
 
@@ -65,7 +63,7 @@ impl <T: LoRaWANCommunicator> DebugCommunicator<T> {
 
     pub fn from(c: T, id: Option<EUI64>) -> DebugCommunicator<T> where T: LoRaWANCommunicator + Send + Sync {
         DebugCommunicator {
-            communicator: c,
+            inner: c,
             id
         }
     }
@@ -75,22 +73,21 @@ impl<T: LoRaWANCommunicator> Deref for DebugCommunicator<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &self.communicator
+        &self.inner
     }
 }
 impl<T: LoRaWANCommunicator> DerefMut for DebugCommunicator<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.communicator
+        &mut self.inner
     }
 }
 
-#[async_trait]
 impl<T: LoRaWANCommunicator> LoRaWANCommunicator for DebugCommunicator<T> {
     type Config = T::Config;
 
     async fn from_config(config: &Self::Config) -> Result<Self, CommunicatorError> {
         Ok(Self {
-            communicator: T::from_config(config).await.unwrap(),
+            inner: T::from_config(config).await.unwrap(),
             id: None
         })
     }
@@ -110,7 +107,7 @@ impl<T: LoRaWANCommunicator> LoRaWANCommunicator for DebugCommunicator<T> {
             dest.map(|v| PrettyHexSlice(&*v).to_string())
                 .unwrap_or("Unknown".to_owned())
         );
-        self.communicator.send(bytes, src, dest).await
+        self.inner.send(bytes, src, dest).await
     }
 
     async fn receive(
@@ -123,7 +120,7 @@ impl<T: LoRaWANCommunicator> LoRaWANCommunicator for DebugCommunicator<T> {
             self.id.map(|v| PrettyHexSlice(&*v).to_string())
                 .unwrap_or("Unknown".to_owned())
         );
-        let r = self.communicator.receive(timeout).await?;
+        let r = self.inner.receive(timeout).await?;
         println!(
             "[{:?}] Device {} Ended waiting! Received {} packets: {}",
             SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(),
@@ -134,5 +131,75 @@ impl<T: LoRaWANCommunicator> LoRaWANCommunicator for DebugCommunicator<T> {
             r.len()
         );
         Ok(r)
+    }
+}
+
+pub struct DebugSender<T: LoRaSender> {
+    id: Option<EUI64>,
+    inner: T
+}
+
+impl <T: LoRaSender + Send + Sync> LoRaSender for DebugSender<T> {
+    type OptionalInfo = T::OptionalInfo;
+    
+    fn send(&self, bytes: &[u8], optional_info: Option<T::OptionalInfo>) -> impl std::future::Future<Output = Result<(), crate::communicator::CommunicatorError>> + Send {
+        println!(
+            "[{:?}] Device {} sending {}",
+            SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(),
+            self.id.map(|v| PrettyHexSlice(&*v).to_string())
+                .unwrap_or("Unknown".to_owned()),
+            PrettyHexSlice(bytes),
+        );
+        self.inner.send(bytes, optional_info)
+    }
+    
+}
+
+pub struct DebugReceiver<T: LoRaReceiver> {
+    id: Option<EUI64>,
+    inner: T
+}
+
+impl <T: LoRaReceiver + Sync + Send> LoRaReceiver for DebugReceiver<T> {
+    async fn receive(
+        &self,
+        timeout: Option<std::time::Duration>,
+    ) -> Result<Vec<crate::communicator::ReceivedTransmission>, crate::communicator::CommunicatorError> {
+        println!(
+            "[{:?}] Device {} Waiting for downlink",
+            SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(),
+            self.id.map(|v| PrettyHexSlice(&*v).to_string())
+                .unwrap_or("Unknown".to_owned())
+        );
+        let r = self.inner.receive(timeout).await?;
+        println!(
+            "[{:?}] Device {} Ended waiting! Received {} packets: {}",
+            SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(),
+            self.id.map(|v| PrettyHexSlice(&*v).to_string())
+                .unwrap_or("Unknown".to_owned()), r.iter().map(|v| {
+                    PrettyHexSlice(&v.transmission.payload).to_string()
+                }).collect::<Vec<_>>().join(","),
+            r.len()
+        );
+        Ok(r)
+    }
+}
+
+impl <T: SplitCommunicator> SplitCommunicator for DebugCommunicator<T> {
+    type Sender = DebugSender<<T as SplitCommunicator>::Sender>;
+    type Receiver = DebugReceiver<<T as SplitCommunicator>::Receiver>;
+
+    async fn split_communicator(self) -> Result<(Self::Sender, Self::Receiver), crate::communicator::CommunicatorError> {
+        let (sender, receiver) = self.inner.split_communicator().await?;
+        Ok((
+            DebugSender {
+                id: self.id,
+                inner: sender
+            },
+            DebugReceiver {
+                id: self.id,
+                inner: receiver
+            }
+        ))
     }
 }

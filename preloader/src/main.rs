@@ -3,12 +3,13 @@ pub mod device;
 use std::{
     fs::File,
     io::{BufReader, Read},
-    net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
+    net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener},
 };
 
 use application_server::application_server::{ApplicationServer, ApplicationServerConfig};
 use clap::Parser;
-use lorawan_device::{configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType, RadioDeviceConfig, UDPNCConfig}, devices::{colosseum_device::ColosseumCommunicator, radio_device::RadioCommunicator}};
+use consensus::{consensus_server::ConsensusConfig, ConsensusCerts};
+use lorawan_device::{configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType, RadioDeviceConfig, UDPNCConfig}, devices::radio_device::RadioCommunicator};
 use lazy_static::lazy_static;
 use lorawan::{
     device::{
@@ -20,7 +21,7 @@ use lorawan::{
     regional_parameters::region::Region,
     utils::eui::EUI64,
 };
-use network_controller::network_controller::NetworkController;
+use network_controller::modules::network_controller::NetworkController;
 use serde::{Deserialize, Serialize};
 use blockchain_api::udp_bridge::{BlockchainUDPClient, BlockchainUDPConfig};
 
@@ -45,6 +46,7 @@ pub struct NetworkControllerConfig {
     udp_config: Option<UDPNCConfig>,
     radio_config: Option<RadioDeviceConfig>,
     colosseum_config: Option<ColosseumDeviceConfig>,
+    consensus_config: ConsensusConfig,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -76,6 +78,7 @@ impl Config {
 async fn network_controller_main(config: &'static NetworkControllerConfig) {
     let nc = NetworkController::new(
         config.nc_id.as_ref(),
+        config.consensus_config.clone()
     );
 
     lazy_static!(
@@ -97,12 +100,12 @@ async fn network_controller_main(config: &'static NetworkControllerConfig) {
         };
     );
 
-    let t1 = config.colosseum_config.as_ref().map(|colosseum_config| nc.routine::<ColosseumCommunicator, BlockchainUDPClient>(colosseum_config, &BC_CONFIG));
+    //let t1 = config.colosseum_config.as_ref().map(|colosseum_config| nc.routine::<ColosseumCommunicator, BlockchainUDPClient>(colosseum_config, &BC_CONFIG));
     let t2 = config.radio_config.as_ref().map(|radio_config| nc.routine::<RadioCommunicator, BlockchainUDPClient>(radio_config, &BC_CONFIG));
     //let t3 = config.tcp_config.as_ref().map(|tcp_config| nc.tcp_routine::<BlockchainUDPClient>(tcp_config, &BC_CONFIG));
     let t3 = config.udp_config.as_ref().map(|udp_config| nc.udp_routine::<BlockchainUDPClient>(udp_config, &BC_CONFIG));
 
-    if let Some(t) = t1 { t.await.unwrap(); }
+    //if let Some(t) = t1 { t.await.unwrap(); }
     if let Some(t) = t2 { t.await.unwrap(); }
     if let Some(t) = t3 { t.await.unwrap(); }
 }
@@ -188,6 +191,14 @@ async fn main() -> Result<(), std::io::Error> {
                 sdr_code: String::from("./src/sdr-lora-merged.py"),
                 dev_id: 0
             }),
+            consensus_config: ConsensusConfig {
+                addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 5050)),
+                certs: ConsensusCerts {
+                    cert_path: String::from(""),
+                    key_path: String::from(""),
+                    ca_cert_path: String::from("")
+                }
+            },
         }),
         application_server: Some(ApplicationServerConfig {
             tcp_receive_port: 5050,

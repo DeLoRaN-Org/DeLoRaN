@@ -31,7 +31,6 @@ pub struct BlockchainUDPConfig {
 
 const LOG_FILE_PATH: &str = "/root/API_invoke_times.csv";
 
-#[async_trait::async_trait]
 impl crate::BlockchainClient for BlockchainUDPClient {
     type Config = BlockchainUDPConfig;
 
@@ -70,9 +69,9 @@ impl crate::BlockchainClient for BlockchainUDPClient {
         })?;
         
         if !ok {
-            return Err(BlockchainError::GenericError("API server returned an error".to_string()));
+            Err(BlockchainError::GenericError("API server returned an error".to_string()))
         } else {
-            return Ok(content.unwrap());
+            Ok(content.unwrap())
         }
     }
 
@@ -107,9 +106,9 @@ impl crate::BlockchainClient for BlockchainUDPClient {
         })?;
         
         if !ok {
-            return Err(BlockchainError::GenericError("API server returned an error".to_string()));
+            Err(BlockchainError::GenericError("API server returned an error".to_string()))
         } else {
-            return Ok(content.unwrap());
+            Ok(content.unwrap())
         }
     }
 
@@ -145,9 +144,9 @@ impl crate::BlockchainClient for BlockchainUDPClient {
         })?;
         
         if !ans.ok {
-            return Err(BlockchainError::GenericError("API server returned an error".to_string()));
+            Err(BlockchainError::GenericError("API server returned an error".to_string()))
         } else {
-            return Ok(());
+            Ok(())
         }
     }
 
@@ -185,9 +184,9 @@ impl crate::BlockchainClient for BlockchainUDPClient {
         })?;
         
         if !ans.ok {
-            return Err(BlockchainError::GenericError("API server returned an error".to_string()));
+            Err(BlockchainError::GenericError("API server returned an error".to_string()))
         } else {
-            return Ok(ans.content.unwrap());
+            Ok(ans.content.unwrap())
         }
     }
     

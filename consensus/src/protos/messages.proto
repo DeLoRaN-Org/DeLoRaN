@@ -1,0 +1,26 @@
+syntax = "proto3";
+package consensus;
+
+service UplinkDeduplicationConsensus {
+    rpc BroadcastReception(UplinkReceivedDisseminationRequest) returns (UplinkReceivedDisseminationResponse);
+    rpc BroadcastNCSet(ReceptionSetDisseminationRequest) returns (ReceptionSetDisseminationResponse);
+}
+
+message UplinkReceivedDisseminationRequest {    
+    string dev_addr = 1;
+    bytes hash      = 2;
+    int32 rssi      = 3; /*used as salt in the hash calcultion (sha256 of packet + rssi)*/
+}
+
+message UplinkReceivedDisseminationResponse {
+    UplinkReceivedDisseminationRequest answer = 1;
+}
+
+message ReceptionSetDisseminationRequest {
+    string dev_addr = 1;
+    map<string, int32> set = 2;
+}
+
+message ReceptionSetDisseminationResponse {
+    ReceptionSetDisseminationRequest answer = 1;
+}

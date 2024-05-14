@@ -1,11 +1,11 @@
 use std::time::Duration;
 
-use async_trait::async_trait;
 use blockchain_api::{exec_bridge::BlockchainExeClient, BlockchainClient};
 use lorawan::{device::Device, utils::eui::EUI64};
-use crate::{communicator::{CommunicatorError, LoRaWANCommunicator, ReceivedTransmission, Transmission}, configs::MockDeviceConfig, devices::lorawan_device::LoRaWANDevice};
+use crate::{communicator::{CommunicatorError, LoRaWANCommunicator, ReceivedTransmission, Transmission}, split_communicator::{LoRaReceiver, LoRaSender, SplitCommunicator}, configs::MockDeviceConfig, devices::lorawan_device::LoRaWANDevice};
 
 pub struct MockDevice;
+
 impl MockDevice {
     pub async fn create(device: Device) -> LoRaWANDevice<MockCommunicator> {
         LoRaWANDevice::new( device,MockCommunicator)
@@ -22,7 +22,6 @@ impl MockDevice {
 
 pub struct MockCommunicator;
 
-#[async_trait]
 impl LoRaWANCommunicator for MockCommunicator {
     type Config = MockDeviceConfig;
 
@@ -52,4 +51,40 @@ impl LoRaWANCommunicator for MockCommunicator {
             arrival_stats: Default::default()
         }])
     }  
+}
+
+
+#[derive(Default)]
+pub struct MockSender;
+
+#[derive(Default)]
+pub struct MockReceiver;
+
+impl LoRaSender for MockSender {
+    type OptionalInfo = ();
+    async fn send(&self, _bytes: &[u8], _optional_info: Option<Self::OptionalInfo>) -> Result<(), CommunicatorError> {
+        Ok(())
+    }
+}
+
+impl LoRaReceiver for MockReceiver {
+    async fn receive(&self, _timeout: Option<Duration>) -> Result<Vec<ReceivedTransmission>, CommunicatorError> {
+        Ok(vec![ReceivedTransmission { 
+            transmission: Transmission {
+                payload: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                ..Default::default()
+            }, 
+            arrival_stats: Default::default()
+        }])
+    }
+}
+
+impl SplitCommunicator for MockCommunicator {
+    type Sender=MockSender;
+    type Receiver=MockReceiver;
+
+    async fn split_communicator(self) -> Result<(Self::Sender, Self::Receiver), CommunicatorError> {
+        Ok((MockSender, MockReceiver))
+    }
+    
 }

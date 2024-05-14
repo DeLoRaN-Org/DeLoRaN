@@ -13,6 +13,5 @@ serde_json = "1.0.108"
 clap = { version = "4.4.11", features = ["derive"] }
 tokio = { version = "1.35.0", features = ["full"] }
 blockchain_api = { path = "../blockchain_api"}
-async-trait = "0.1.74"
-pyo3 = { version = "0.20.0", features = ["auto-initialize"] }
+pyo3 = { version = "0.21.2", features = ["auto-initialize"] }
 thiserror = "1.0.50"

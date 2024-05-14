@@ -2,11 +2,10 @@ use std::ops::{Deref, DerefMut};
 use std::fmt::Debug;
 use std::{fs, thread};
 use std::time::Duration;
-use async_trait::async_trait;
 use blockchain_api::BlockchainClient;
 use blockchain_api::exec_bridge::BlockchainExeClient;
 use lorawan::{device::Device, utils::eui::EUI64};
-use pyo3::{PyAny, Python, Py};
+use pyo3::{PyAny, Python, Py, prelude::PyAnyMethods};
 use pyo3::types::PyModule;
 use tokio::sync::{oneshot, mpsc};
 
@@ -132,7 +131,6 @@ impl ColosseumCommunicator {
     }
 }
 
-#[async_trait]
 impl LoRaWANCommunicator for ColosseumCommunicator {
     type Config = ColosseumDeviceConfig;
     
@@ -145,7 +143,7 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
         let sdr_lora_code = fs::read_to_string(&config.sdr_code).unwrap();
         let (lora_sender, lora_receiver): (Py<PyAny>, Py<PyAny>) = Python::with_gil(|py| {
             let sdr_module =
-                PyModule::from_code(py, &sdr_lora_code, "sdr-lora-merged.py", "sdr-lora").unwrap();
+                PyModule::from_code_bound(py, &sdr_lora_code, "sdr-lora-merged.py", "sdr-lora").unwrap();
             sdr_module
                 .getattr("LoRaBufferedBuilder")
                 .unwrap()
@@ -171,7 +169,7 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
             while let Some(((data, src, dest), sender)) = sender_recv.blocking_recv() {
                 //println!("{}", PrettyHexSlice(&data));
                 Python::with_gil(|py| {
-                    match lora_sender.call_method(
+                    match lora_sender.call_method_bound(
                         py,
                         "send_radio",
                         (data, extract_dev_id(src), extract_dev_id(dest)),
@@ -197,7 +195,7 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
                         let sf_list = [radio_config.spreading_factor.value()];
                         Python::with_gil(|py| {
                             match lora_receiver
-                            .call_method(py, "recv_radio", (sf_list, d_id ,timeout.map(|d| d.as_secs())), None)
+                            .call_method_bound(py, "recv_radio", (sf_list, d_id ,timeout.map(|d| d.as_secs())), None)
                             .unwrap()
                             .extract(py)
                             {
@@ -213,7 +211,7 @@ impl LoRaWANCommunicator for ColosseumCommunicator {
                     ReceiverReq::RegisterDevice(d_id) => {
                         Python::with_gil(|py| {
                             lora_receiver
-                            .call_method(py, "register_device_id", (d_id,), None)
+                            .call_method_bound(py, "register_device_id", (d_id,), None)
                             .unwrap();
                             let _ = sender.send(ReceiverAns::RegisterDevice(true));
                         });

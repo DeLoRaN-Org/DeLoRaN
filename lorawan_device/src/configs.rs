@@ -42,10 +42,7 @@ pub struct ColosseumDeviceConfig {
     pub dev_id: u16
 }
 
-pub struct MockDeviceConfig {
-    pub radio_config: RadioDeviceConfig,
-    pub address: IpAddr,
-}
+pub struct MockDeviceConfig {}
 
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

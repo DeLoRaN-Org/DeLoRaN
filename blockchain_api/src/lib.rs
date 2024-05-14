@@ -16,7 +16,6 @@ use lorawan::lorawan_packet::join::JoinRequestType;
 use lorawan::regional_parameters::region::Region;
 use lorawan::utils::eui::EUI64;
 use serde::{Deserialize, Serialize};
-use async_trait::async_trait;
 
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -188,25 +187,24 @@ impl Display for BlockchainError {
 }
 
 
-#[async_trait]
 pub trait BlockchainClient: Send + Sync {
     type Config: Send + Sync + Clone;
 
-    async fn from_config(config: &Self::Config) -> Result<Box<Self>, BlockchainError>;
-    async fn get_hash(&self) -> Result<String, BlockchainError>;
-    async fn get_device_session(&self,    dev_addr: &[u8; 4]) -> Result<BlockchainDeviceSession, BlockchainError>;
-    async fn get_device_config(&self, dev_eui: &EUI64,) -> Result<BlockchainDeviceConfig, BlockchainError>;
-    async fn get_device(&self, dev_eui: &EUI64) -> Result<Device, BlockchainError>;
-    async fn get_all_devices(&self) -> Result<BlockchainState, BlockchainError>;
-    async fn create_device_config(&self, device: &Device) -> Result<(), BlockchainError>;
-    async fn delete_device(&self, dev_eui: &EUI64) -> Result<(), BlockchainError>;
-    async fn delete_device_session(&self, dev_addr: &[u8; 4]) -> Result<(), BlockchainError>;
-    async fn create_uplink(&self, packet: &[u8], answer: Option<&[u8]>) -> Result<(),BlockchainError>;
-    async fn join_procedure(&self, join_request: &[u8], join_accept: &[u8], nc_id: &str, dev_id: &EUI64) -> Result<bool,BlockchainError>;
-    async fn get_packet(&self, hash: &str) -> Result<BlockchainPacket,BlockchainError>;
-    async fn get_public_blockchain_state(&self) -> Result<BlockchainState, BlockchainError>;
-    async fn get_device_org(&self, dev_id: &[u8]) -> Result<String, BlockchainError>;
-    async fn get_org_anchor_address(&self, org: &str) -> Result<(IpAddr, u16), BlockchainError>;
+    fn from_config(config: &Self::Config) -> impl std::future::Future<Output = Result<Box<Self>, BlockchainError>> + Send;
+    fn get_hash(&self) -> impl std::future::Future<Output = Result<String, BlockchainError>> + Send;
+    fn get_device_session(&self,    dev_addr: &[u8; 4]) -> impl std::future::Future<Output = Result<BlockchainDeviceSession, BlockchainError>> + Send;
+    fn get_device_config(&self, dev_eui: &EUI64,) -> impl std::future::Future<Output = Result<BlockchainDeviceConfig, BlockchainError>> + Send;
+    fn get_device(&self, dev_eui: &EUI64) -> impl std::future::Future<Output = Result<Device, BlockchainError>> + Send;
+    fn get_all_devices(&self) -> impl std::future::Future<Output = Result<BlockchainState, BlockchainError>> + Send;
+    fn create_device_config(&self, device: &Device) -> impl std::future::Future<Output = Result<(), BlockchainError>> + Send;
+    fn delete_device(&self, dev_eui: &EUI64) -> impl std::future::Future<Output = Result<(), BlockchainError>> + Send;
+    fn delete_device_session(&self, dev_addr: &[u8; 4]) -> impl std::future::Future<Output = Result<(), BlockchainError>> + Send;
+    fn create_uplink(&self, packet: &[u8], answer: Option<&[u8]>) -> impl std::future::Future<Output = Result<(),BlockchainError>> + Send;
+    fn join_procedure(&self, join_request: &[u8], join_accept: &[u8], nc_id: &str, dev_id: &EUI64) -> impl std::future::Future<Output = Result<bool,BlockchainError>> + Send;
+    fn get_packet(&self, hash: &str) -> impl std::future::Future<Output = Result<BlockchainPacket,BlockchainError>> + Send;
+    fn get_public_blockchain_state(&self) -> impl std::future::Future<Output = Result<BlockchainState, BlockchainError>> + Send;
+    fn get_device_org(&self, dev_id: &[u8]) -> impl std::future::Future<Output = Result<String, BlockchainError>> + Send;
+    fn get_org_anchor_address(&self, org: &str) -> impl std::future::Future<Output = Result<(IpAddr, u16), BlockchainError>> + Send;
 }
 
 

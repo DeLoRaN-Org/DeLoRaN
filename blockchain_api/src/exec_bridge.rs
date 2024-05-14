@@ -225,7 +225,6 @@ impl BlockchainExeClient {
     }
 }
 
-#[async_trait::async_trait]
 impl crate::BlockchainClient for BlockchainExeClient {
     type Config = BlockchainExeConfig;
 

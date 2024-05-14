@@ -2,7 +2,6 @@
 use std::ops::{Deref, DerefMut};
 use std::fmt::Debug;
 use std::time::Duration;
-use async_trait::async_trait;
 use blockchain_api::BlockchainClient;
 use blockchain_api::exec_bridge::BlockchainExeClient;
 
@@ -11,6 +10,7 @@ use lorawan::{device::Device, utils::eui::EUI64};
 use crate::communicator::{CommunicatorError, LoRaWANCommunicator, ReceivedTransmission};
 use crate::configs::RadioDeviceConfig;
 use crate::devices::lorawan_device::LoRaWANDevice;
+use crate::split_communicator::{LoRaReceiver, LoRaSender, SplitCommunicator};
 
 pub struct RadioDevice {
     device: LoRaWANDevice<RadioCommunicator>,
@@ -54,7 +54,6 @@ pub struct RadioCommunicator {
     pub config: RadioDeviceConfig,
 }
 
-#[async_trait]
 impl LoRaWANCommunicator for RadioCommunicator {
     type Config = RadioDeviceConfig;
 
@@ -75,6 +74,40 @@ impl LoRaWANCommunicator for RadioCommunicator {
         &self,
         _timeout: Option<Duration>,
     ) -> Result<Vec<ReceivedTransmission>, CommunicatorError> {
+        todo!()
+    }
+}
+
+pub struct RadioSender {
+    _config: RadioDeviceConfig,
+    _inner: u8,
+}
+
+impl LoRaSender for RadioSender {
+    type OptionalInfo = ();
+
+    async fn send(&self, _bytes: &[u8], _optional_info: Option<Self::OptionalInfo>) -> Result<(), CommunicatorError> {
+        todo!()
+    }
+    
+}
+
+pub struct RadioReceiver {
+    _config: RadioDeviceConfig,
+    _inner: u8,
+}
+
+impl LoRaReceiver for RadioReceiver {
+    async fn receive(&self, _timeout: Option<Duration>) -> Result<Vec<ReceivedTransmission>, CommunicatorError> {
+        todo!()
+    }
+}
+
+impl SplitCommunicator for RadioCommunicator {
+    type Sender=RadioSender;
+    type Receiver=RadioReceiver;
+
+    async fn split_communicator(self) -> Result<(Self::Sender, Self::Receiver), CommunicatorError> {
         todo!()
     }
 }

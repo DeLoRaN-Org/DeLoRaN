@@ -1,6 +1,5 @@
-use std::time::Duration;
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use async_trait::async_trait;
 use blockchain_api::{exec_bridge::BlockchainExeClient, BlockchainClient};
 use lorawan::{device::Device, utils::eui::EUI64};
 use tokio::net::UdpSocket;
@@ -9,7 +8,7 @@ use lorawan::utils::errors::LoRaWANError;
 use crate::{
     communicator::{CommunicatorError, LoRaWANCommunicator, ReceivedTransmission, Transmission},
     configs::UDPDeviceConfig,
-    devices::lorawan_device::LoRaWANDevice,
+    devices::lorawan_device::LoRaWANDevice, split_communicator::{LoRaReceiver, LoRaSender, SplitCommunicator},
 };
 
 pub struct UDPDevice;
@@ -53,7 +52,6 @@ impl UDPCommunicator {
     }
 }
 
-#[async_trait]
 impl LoRaWANCommunicator for UDPCommunicator {
     type Config = UDPDeviceConfig;
 
@@ -71,8 +69,7 @@ impl LoRaWANCommunicator for UDPCommunicator {
         _src: Option<EUI64>,
         _dest: Option<EUI64>,
     ) -> Result<(), CommunicatorError> {
-        let sock = &self.socket;
-        sock.send(bytes).await?;
+        self.socket.send(bytes).await?;
         Ok(())
     }
 
@@ -84,7 +81,7 @@ impl LoRaWANCommunicator for UDPCommunicator {
         let sock = &self.socket;
         match timeout {
             Some(d) => {
-                if tokio::time::timeout(d, sock.recv_buf(&mut buf))
+                if tokio::time::timeout(d, sock.recv(&mut buf))
                     .await
                     .is_err()
                 {
@@ -106,5 +103,102 @@ impl LoRaWANCommunicator for UDPCommunicator {
             ..Default::default()
         };
         Ok(vec![packet])
+    }
+}
+
+pub struct UDPSender {
+    socket: Arc<UdpSocket>,
+}
+
+pub struct UDPReceiver {
+    socket: Arc<UdpSocket>,
+}
+
+impl LoRaSender for UDPSender {
+    type OptionalInfo=SocketAddr;
+
+    async fn send(&self, bytes: &[u8], optional_info: Option<Self::OptionalInfo>) -> Result<(), CommunicatorError> {
+        if let Some(addr) = optional_info {
+            self.socket.send_to(bytes, addr).await?;
+        } else {
+            self.socket.send(bytes).await?;
+        }
+        Ok(())
+    }
+    
+}
+
+impl LoRaReceiver for UDPReceiver {
+    async fn receive(&self, timeout: Option<Duration>) -> Result<Vec<ReceivedTransmission>, CommunicatorError> {
+        let mut buf = Vec::with_capacity(256);
+        let sock = &self.socket;
+        match timeout {
+            Some(d) => {
+                if tokio::time::timeout(d, sock.recv(&mut buf))
+                    .await
+                    .is_err()
+                {
+                    return Err(CommunicatorError::LoRaWANError(
+                        LoRaWANError::MissingDownlink,
+                    ));
+                }
+            }
+            None => {
+                sock.recv_buf(&mut buf).await?;
+            }
+        }
+
+        let packet = ReceivedTransmission {
+            transmission: Transmission {
+                payload: buf,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        Ok(vec![packet])
+    }
+}
+
+
+impl SplitCommunicator for UDPCommunicator {
+    type Sender=UDPSender;
+    type Receiver=UDPReceiver;
+
+    async fn split_communicator(self) -> Result<(Self::Sender, Self::Receiver), CommunicatorError> {
+        let socket = Arc::new(self.socket);
+
+        Ok((
+            UDPSender {
+                socket: socket.clone(),
+            },
+            UDPReceiver {
+                socket: socket.clone(),
+            }
+        ))
+    }
+}
+
+impl UDPSender {
+    pub fn new(socket: Arc<UdpSocket>) -> Self {
+        Self {
+            socket,
+        }
+    }
+
+    pub fn into_inner(self) -> Arc<UdpSocket> {
+        self.socket
+    }
+}
+
+
+impl UDPReceiver {
+    pub fn new(socket: Arc<UdpSocket>) -> Self {
+        Self {
+            socket,
+        }
+    }
+
+    pub fn into_inner(self) -> Arc<UdpSocket> {
+        self.socket
     }
 }
