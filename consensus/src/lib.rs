@@ -7,6 +7,7 @@ pub mod protos {
     tonic::include_proto!("consensus");
 }
 pub mod consensus_server;
+pub mod malicious_consensus_server;
 pub mod consensus_client;
 
 
@@ -35,6 +36,7 @@ pub enum ConsensusError {
     NCAlreadyInSet,
     InvalidSet,
     WrongState,
+    RoundEndedAlready,
 
     InvalidUri,
     InvalidCertificate,
@@ -72,7 +74,7 @@ pub struct ConsensusRound {
     pub nc_list: Vec<String>,
     pub packet: Vec<u8>,
     pub nc_set: HashMap<String, i32>,
-    pub validated_sets: Vec<String>,
+    pub received_sets: Vec<String>,
     pub sender: Sender<bool>,
 }
 

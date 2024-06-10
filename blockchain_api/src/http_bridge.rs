@@ -4,7 +4,7 @@ use lorawan::{utils::{PrettyHexSlice, eui::EUI64}, device::Device};
 use reqwest::{Client, header::{HeaderMap, CONTENT_TYPE}};
 use serde_json::json;
 
-use crate::{BlockchainDeviceSession, BlockchainDeviceConfig, BlockchainState, BlockchainPacket, BlockchainError};
+use crate::{BlockchainDeviceConfig, BlockchainDeviceSession, BlockchainError, BlockchainPacket, BlockchainState, HyperledgerJoinDeduplicationAns};
 
 #[derive(Clone)]
 pub struct BlockchainHTTPClient {
@@ -218,7 +218,7 @@ impl crate::BlockchainClient for BlockchainHTTPClient {
         }
     }
 
-    async fn join_procedure(&self, _join_request: &[u8], _join_accept: &[u8], _nc_id: &str, _dev_eui: &EUI64) -> Result<bool,BlockchainError> {
+    async fn join_procedure(&self, _join_request: &[u8], _join_accept: &[u8], _dev_eui: &EUI64) -> Result<HyperledgerJoinDeduplicationAns,BlockchainError> {
         unimplemented!("Not implemented because deprecated")
     }
     
@@ -320,5 +320,9 @@ impl crate::BlockchainClient for BlockchainHTTPClient {
 
     async fn get_org_anchor_address(&self, _org: &str) -> Result<(IpAddr, u16), BlockchainError> {
         todo!("look on phdind")
+    }
+    
+    async fn session_generation(&self, _keys: Vec<&str>, _dev_eui: &str) -> Result<(),BlockchainError> {
+        unimplemented!()
     }
 }

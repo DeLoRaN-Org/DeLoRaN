@@ -2,7 +2,9 @@ use core::panic;
 use std::{time::{Duration, Instant, SystemTime}, fs::OpenOptions};
 
 use lorawan_device::{
-    communicator::LoRaWANCommunicator, configs::{DeviceConfig, DeviceConfigType}, devices::{colosseum_device::{ColosseumCommunicator, ColosseumDevice}, debug_device::DebugDevice, lorawan_device::LoRaWANDevice, radio_device::RadioDevice, udp_device::UDPDevice}
+    communicator::LoRaWANCommunicator, configs::{DeviceConfig, DeviceConfigType}, 
+    //devices::{colosseum_device::{ColosseumCommunicator, ColosseumDevice}, 
+    devices::{debug_device::DebugDevice, lorawan_device::LoRaWANDevice, radio_device::RadioDevice, udp_device::UDPDevice}
 };
 use tokio::time::sleep;
 use std::io::Write;
@@ -83,7 +85,7 @@ impl<T: LoRaWANCommunicator + Send + Sync> Run for LoRaWANDevice<T> {
 
 pub async fn device_main(configs: Vec<&'static DeviceConfig>) {
     let mut handlers = Vec::new();
-    let mut colosseum_communications = None;
+    //let mut colosseum_communications = None;
     const SKIP_DEVICES: usize = 0;
     const LIMIT: usize = 25;
 
@@ -109,21 +111,22 @@ pub async fn device_main(configs: Vec<&'static DeviceConfig>) {
                         .await;
                 }));
             }
-            DeviceConfigType::COLOSSEUM(c) => {
-                if colosseum_communications.is_none() {
-                    colosseum_communications =
-                        Some(ColosseumCommunicator::from_config(c).await.unwrap());
-                }
-                let cloned = colosseum_communications.as_ref().cloned().unwrap();
+            DeviceConfigType::COLOSSEUM(_c) => {
+                //if colosseum_communications.is_none() {
+                //    colosseum_communications = None;
+                //    panic!("ColosseumCommunicator deprecated");
+                //    //Some(ColosseumCommunicator::from_config(c).await.unwrap());
+                //}
+                //let cloned = colosseum_communications.as_ref().cloned().unwrap();
 
-                handlers.push(tokio::spawn(async {
-                    DebugDevice::from(
-                        ColosseumDevice::with_shared_communicator(config.configuration, cloned)
-                            .await,
-                    )
-                    .run()
-                    .await;
-                }));
+                //handlers.push(tokio::spawn(async {
+                //    DebugDevice::from(
+                //        ColosseumDevice::with_shared_communicator(config.configuration, cloned)
+                //            .await,
+                //    )
+                //    .run()
+                //    .await;
+                //}));
                 //ColosseumDevice::create(config.configuration, c.address, c.radio_config, sdr_code).run().await;
             }
             _ => {

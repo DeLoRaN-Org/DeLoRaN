@@ -9,7 +9,7 @@ use tokio::process::Command;
 use std::io::Write;
 
 
-use crate::{BlockchainDeviceSession, BlockchainDeviceConfig, BlockchainState, BlockchainPacket, BlockchainError};
+use crate::{BlockchainDeviceConfig, BlockchainDeviceSession, BlockchainError, BlockchainPacket, BlockchainState, HyperledgerJoinDeduplicationAns};
 
 #[allow(non_snake_case)]
 #[derive(Serialize)]
@@ -30,12 +30,6 @@ pub struct HyperledgerInvokeAns {
     name: String,
     caller: String,
     msg: String
-}
-
-#[derive(Deserialize, Debug)]
-pub struct HyperledgerJoinDeduplicationAns {
-    winner: String,
-    keys: Vec<String>
 }
 
 trait TakeLastLine { //for fun
@@ -359,7 +353,7 @@ impl crate::BlockchainClient for BlockchainExeClient {
         Ok(())
     }
 
-    async fn join_procedure(&self, join_request: &[u8], join_accept: &[u8], nc_id: &str, dev_eui: &EUI64) -> Result<bool,BlockchainError> {
+    async fn join_procedure(&self, join_request: &[u8], join_accept: &[u8], dev_eui: &EUI64) -> Result<HyperledgerJoinDeduplicationAns,BlockchainError> {
         let date = format!("{}",SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis());
         let transient_data = HashMap::from([
             ("join_request", join_request.to_vec()),
@@ -390,27 +384,27 @@ impl crate::BlockchainClient for BlockchainExeClient {
         };
         let res = self.create_command::<HyperledgerJoinDeduplicationAns>(false,args, Some(&transient_data)).await.map_err(BlockchainError::GenericError)?;
 
-        let d_eui = dev_eui.to_string().as_bytes().to_vec();
+        //let d_eui = dev_eui.to_string().as_bytes().to_vec();
         match res.content {
             Some(ans) => {
-                if ans.winner != nc_id {
-                    return Ok(false)   
-                }
-
-                let transient_data = HashMap::from([
-                    ("keys", serde_json::to_vec(&ans.keys).unwrap()),
-                    //("nc_id", nc_id.as_bytes().to_vec()),
-                    ("dev_eui", d_eui)
-                ]);
-
-                let args = BlockchainArgs {
-                    Args: vec![
-                        "LoRaWANPackets:JoinRequestSessionGeneration".to_owned(),
-                    ],
-                };
-
-                self.create_command::<()>(true,args, Some(&transient_data)).await.map_err(BlockchainError::GenericError)?;
-                Ok(true)
+                Ok(ans)
+                //if ans.winner != nc_id {
+                //    return Ok(false)   
+                //}
+                //MOVED TO SESSIONGENERATION
+                //let transient_data = HashMap::from([
+                //    ("keys", serde_json::to_vec(&ans.keys).unwrap()),
+                //    //("nc_id", nc_id.as_bytes().to_vec()),
+                //    ("dev_eui", d_eui)
+                //]);
+                //
+                //let args = BlockchainArgs {
+                //    Args: vec![
+                //        "LoRaWANPackets:JoinRequestSessionGeneration".to_owned(),
+                //    ],
+                //};
+                //
+                //self.create_command::<()>(true,args, Some(&transient_data)).await.map_err(BlockchainError::GenericError)?;
             },
             None => Err(BlockchainError::MissingContent)
         }
@@ -456,5 +450,22 @@ impl crate::BlockchainClient for BlockchainExeClient {
 
     async fn get_org_anchor_address(&self, _org: &str) -> Result<(IpAddr, u16), BlockchainError> {
         todo!("look on phdind")
+    }
+    
+    async fn session_generation(&self, keys: Vec<&str>, dev_eui: &str) -> Result<(),BlockchainError> {
+        let transient_data = HashMap::from([
+            ("keys", serde_json::to_vec(&keys).unwrap()),
+            //("nc_id", nc_id.as_bytes().to_vec()),
+            ("dev_eui", dev_eui.as_bytes().to_vec())
+        ]);
+        
+        let args = BlockchainArgs {
+            Args: vec![
+                "LoRaWANPackets:JoinRequestSessionGeneration".to_owned(),
+            ],
+        };
+
+        self.create_command::<()>(true,args, Some(&transient_data)).await.map_err(BlockchainError::GenericError)?;
+        Ok(())
     }
 }

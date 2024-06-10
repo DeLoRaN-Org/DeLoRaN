@@ -9,7 +9,7 @@ use std::{
 use application_server::application_server::{ApplicationServer, ApplicationServerConfig};
 use clap::Parser;
 use consensus::{consensus_server::ConsensusConfig, ConsensusCerts};
-use lorawan_device::{configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType, RadioDeviceConfig, UDPNCConfig}, devices::radio_device::RadioCommunicator};
+use lorawan_device::configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType, RadioDeviceConfig, UDPNCConfig};
 use lazy_static::lazy_static;
 use lorawan::{
     device::{
@@ -101,12 +101,12 @@ async fn network_controller_main(config: &'static NetworkControllerConfig) {
     );
 
     //let t1 = config.colosseum_config.as_ref().map(|colosseum_config| nc.routine::<ColosseumCommunicator, BlockchainUDPClient>(colosseum_config, &BC_CONFIG));
-    let t2 = config.radio_config.as_ref().map(|radio_config| nc.routine::<RadioCommunicator, BlockchainUDPClient>(radio_config, &BC_CONFIG));
+    //let t2 = config.radio_config.as_ref().map(|radio_config| nc.routine::<RadioCommunicator, BlockchainUDPClient>(radio_config, &BC_CONFIG));
     //let t3 = config.tcp_config.as_ref().map(|tcp_config| nc.tcp_routine::<BlockchainUDPClient>(tcp_config, &BC_CONFIG));
     let t3 = config.udp_config.as_ref().map(|udp_config| nc.udp_routine::<BlockchainUDPClient>(udp_config, &BC_CONFIG));
 
     //if let Some(t) = t1 { t.await.unwrap(); }
-    if let Some(t) = t2 { t.await.unwrap(); }
+    //if let Some(t) = t2 { t.await.unwrap(); }
     if let Some(t) = t3 { t.await.unwrap(); }
 }
 

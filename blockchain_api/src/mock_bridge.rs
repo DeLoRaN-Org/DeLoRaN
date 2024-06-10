@@ -13,7 +13,7 @@ use rand::SeedableRng;
 
 use crate::{
     BlockchainClient, BlockchainDeviceConfig, BlockchainDeviceSession, BlockchainError,
-    BlockchainPacket, BlockchainState,
+    BlockchainPacket, BlockchainState, HyperledgerJoinDeduplicationAns,
 };
 
 
@@ -196,9 +196,14 @@ impl BlockchainClient for BlockchainMockClient {
         Ok(())
     }
 
-    async fn join_procedure(&self, _join_request: &[u8], _join_accept: &[u8], _nc_id: &str, _dev_eui: &EUI64) -> Result<bool,BlockchainError> {
-        Ok(true)
+    async fn join_procedure(&self, _join_request: &[u8], _join_accept: &[u8], _dev_eui: &EUI64) -> Result<HyperledgerJoinDeduplicationAns,BlockchainError> {
+    Ok(HyperledgerJoinDeduplicationAns {
+        winner: "a1b2c3d4".to_owned(),
+            keys: vec!["key1".to_owned(), "key2".to_owned()]
+        })
     }
+
+    
 
     async fn get_packet(&self, hash: &str) -> Result<BlockchainPacket, BlockchainError> {
         Ok(BlockchainPacket {
@@ -221,5 +226,9 @@ impl BlockchainClient for BlockchainMockClient {
 
     async fn get_org_anchor_address(&self, _org: &str) -> Result<(IpAddr, u16), BlockchainError> {
         Ok((IpAddr::V4(Ipv4Addr::LOCALHOST), 1312))
+    }
+    
+    async fn session_generation(&self, _keys: Vec<&str>, _dev_eui: &str) -> Result<(),BlockchainError> {
+        Ok(())
     }
 }

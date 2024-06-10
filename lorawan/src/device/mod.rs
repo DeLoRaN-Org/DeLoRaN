@@ -38,13 +38,14 @@ impl DeviceClass {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash, Default)]
 pub enum LoRaWANVersion {
     V1_0,
     V1_0_1,
     V1_0_2,
     V1_0_3,
     V1_0_4,
+    #[default]
     V1_1,
 }
 
@@ -58,13 +59,14 @@ impl LoRaWANVersion {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Serialize, Deserialize, Hash, Default)]
 pub enum ActivationMode {
     ABP,
+    #[default]
     OTAA,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, Default)]
 pub struct Device {
     class: DeviceClass,
     version: LoRaWANVersion,

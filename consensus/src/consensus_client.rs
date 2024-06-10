@@ -10,10 +10,10 @@ pub struct ConsensusClient {
 }
 
 impl ConsensusClient {
-    pub async fn new(addr: String, certs: ConsensusCerts) -> Result<Self, ConsensusError> {
-        let client_cert = std::fs::read_to_string(certs.cert_path)?;
-        let client_key = std::fs::read_to_string(certs.key_path)?;
-        let certificate = Certificate::from_pem(std::fs::read_to_string(certs.ca_cert_path)?);
+    pub async fn new(addr: String, certs: &ConsensusCerts) -> Result<Self, ConsensusError> {
+        let client_cert = std::fs::read_to_string(&certs.cert_path)?;
+        let client_key = std::fs::read_to_string(&certs.key_path)?;
+        let certificate = Certificate::from_pem(std::fs::read_to_string(&certs.ca_cert_path)?);
         
         let client_identity = Identity::from_pem(client_cert, client_key);
         let tls_config = tonic::transport::ClientTlsConfig::new().ca_certificate(certificate).identity(client_identity);

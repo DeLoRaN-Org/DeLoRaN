@@ -60,6 +60,7 @@ impl <T: LoRaSender> DownlinkScheduler<T> {
                 },
                 _ = tokio::time::sleep_until(self.message_storage.peek().map_or(Instant::now() + Duration::from_millis(100), |v| v.0.moment)), if self.message_storage.peek().is_some() => {
                     if let Some(head) = self.message_storage.pop() {
+                        println!("Sending downlink transmission");
                         self.downlink_communicator.send(&head.0.transmission.payload, head.0.additional_info).await.unwrap();
                     }
                 }

@@ -17,6 +17,25 @@ use lorawan::regional_parameters::region::Region;
 use lorawan::utils::eui::EUI64;
 use serde::{Deserialize, Serialize};
 
+#[derive(Deserialize, Debug)]
+pub struct HyperledgerJoinDeduplicationAns {
+    winner: String,
+    keys: Vec<String>
+}
+
+impl HyperledgerJoinDeduplicationAns {
+    pub fn is_winner(&self, other: &str) -> bool {
+        self.winner == other
+    }
+
+    pub fn get_keys(&self) -> &Vec<String> {
+        &self.keys
+    }
+
+    pub fn into_tuple(self) -> (String, Vec<String>) {
+        (self.winner, self.keys)
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BlockchainDeviceConfig {
@@ -200,7 +219,8 @@ pub trait BlockchainClient: Send + Sync {
     fn delete_device(&self, dev_eui: &EUI64) -> impl std::future::Future<Output = Result<(), BlockchainError>> + Send;
     fn delete_device_session(&self, dev_addr: &[u8; 4]) -> impl std::future::Future<Output = Result<(), BlockchainError>> + Send;
     fn create_uplink(&self, packet: &[u8], answer: Option<&[u8]>) -> impl std::future::Future<Output = Result<(),BlockchainError>> + Send;
-    fn join_procedure(&self, join_request: &[u8], join_accept: &[u8], nc_id: &str, dev_id: &EUI64) -> impl std::future::Future<Output = Result<bool,BlockchainError>> + Send;
+    fn join_procedure(&self, join_request: &[u8], join_accept: &[u8], dev_id: &EUI64) -> impl std::future::Future<Output = Result<HyperledgerJoinDeduplicationAns,BlockchainError>> + Send;
+    fn session_generation(&self, keys: Vec<&str>, dev_eui: &str) -> impl std::future::Future<Output = Result<(),BlockchainError>> + Send;
     fn get_packet(&self, hash: &str) -> impl std::future::Future<Output = Result<BlockchainPacket,BlockchainError>> + Send;
     fn get_public_blockchain_state(&self) -> impl std::future::Future<Output = Result<BlockchainState, BlockchainError>> + Send;
     fn get_device_org(&self, dev_id: &[u8]) -> impl std::future::Future<Output = Result<String, BlockchainError>> + Send;

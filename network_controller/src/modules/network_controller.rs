@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use blockchain_api::{BlockchainClient, BlockchainError};
 use consensus::{consensus_server::{ConsensusConfig, ConsensusServer}, ConsensusMessage};
-use lorawan::{utils::{increment_nonce, nonce_valid, PrettyHexSlice, traits::ToBytesWithContext, errors::LoRaWANError}, device::Device, lorawan_packet::{LoRaWANPacket, join::{JoinAcceptPayload, JoinRequestType}, payload::Payload, mhdr::{MHDR, MType, Major}, mac_payload::MACPayload, fhdr::FHDR, fctrl::{FCtrl, DownlinkFCtrl}, mac_commands}};
+use lorawan::{device::Device, lorawan_packet::{fctrl::{DownlinkFCtrl, FCtrl}, fhdr::FHDR, join::{JoinAcceptPayload, JoinRequestType}, mac_commands, mac_payload::MACPayload, mhdr::{MType, Major, MHDR}, payload::Payload, LoRaWANPacket}, utils::{errors::LoRaWANError, increment_nonce, nonce_valid, traits::ToBytesWithContext, PrettyHexSlice}};
 use lorawan_device::{communicator::{ReceivedTransmission, Transmission}, configs::UDPNCConfig, devices::udp_device::UDPSender, split_communicator::SplitCommunicator};
 use openssl::sha::sha256;
 
@@ -11,13 +11,16 @@ use crate::modules::error::NCError;
 use super::downlink_scheduler::{DownlinkScheduler, DownlinkSchedulerMessage};
 use lorawan_device::split_communicator::LoRaReceiver;
 
+#[derive(Debug)]
 struct DownlinkConsensusLedgerUpdateInfo {
     dev_addr: [u8; 4],
     nc_list: Vec<String>,
 }
 
+#[derive(Debug)]
 struct DispatchResults {
-    info: Option<DownlinkConsensusLedgerUpdateInfo>,
+    session_derivation_info: Option<(Vec<String>, String)>,
+    consensus_info: Option<DownlinkConsensusLedgerUpdateInfo>,
     answer: Option<Vec<u8>>,
 }
 
@@ -53,7 +56,6 @@ impl NetworkController {
                     else {
                         LoRaWANPacket::validate_mic(join_request, &packet, &device)?;
                         
-                        //let dev_addr = [0_u8; 4].map(|_| rand::random::<u8>()); 
                         let mut dl_settings = 0_u8;
                         let opt_neg_v1_1 = 0b10000000;
                         dl_settings |= 0b00010001; //TODO per ora rx1_dr_offset 1, rx2_data_rate 1, capire come farle bene poi
@@ -80,24 +82,24 @@ impl NetworkController {
                         device.generate_session_context(&join_accept)?;
                         device.set_last_join_request_received(JoinRequestType::JoinRequest);
 
-                        let packet = LoRaWANPacket::new(MHDR::new(MType::JoinAccept, Major::R1), Payload::JoinAccept(join_accept));
-                        //println!("{device}");
-                        
+                        let packet = LoRaWANPacket::new(MHDR::new(MType::JoinAccept, Major::R1), Payload::JoinAccept(join_accept));                        
                         let join_accept = packet.to_bytes_with_context(&device).map_err(NCError::from)?;
 
-                        if bc_client.join_procedure(join_request, &join_accept, nc_id, jr_p.dev_eui()).await? {
-                            println!("I'm the one who must send the join accept");
+                        let deduplication_ans = bc_client.join_procedure(join_request, &join_accept, jr_p.dev_eui()).await?; 
+                        if deduplication_ans.is_winner(nc_id) {
+                            let (_, keys) = deduplication_ans.into_tuple();
                             Ok(DispatchResults {
-                                    info: None,
+                                    session_derivation_info: Some((keys, device.dev_eui().to_string())),
+                                    consensus_info: None,
                                     answer: Some(join_accept),
                             })
                         } else {
                             Ok(DispatchResults {
-                                info: None,
+                                session_derivation_info: None,
+                                consensus_info: None,
                                 answer: None,
                             })
-                        }
-                        
+                        }   
                     }
                 }
             }
@@ -110,6 +112,7 @@ impl NetworkController {
             let dev_addr = payload.fhdr().dev_addr();
 
             if let Ok(session) = bc_client.get_device_session(&dev_addr).await {
+                println!("Known-DevAddr({:?})", dev_addr);
                 let fcnt_u16 = payload.fhdr().fcnt();
                 let current_fcnt = session.f_cnt_up;  
                         
@@ -136,7 +139,8 @@ impl NetworkController {
                     }
                 }
                 Ok((device, DispatchResults {
-                    info: Some(DownlinkConsensusLedgerUpdateInfo {
+                    session_derivation_info: None,
+                    consensus_info: Some(DownlinkConsensusLedgerUpdateInfo {
                         dev_addr,
                         nc_list,
                     }),
@@ -244,20 +248,25 @@ impl NetworkController {
                     let mhdr = MHDR::from_bytes(data[0]);     
                     match Self::dispatch_task(&mhdr, data, &c, nc_id).await {
                         Ok(ans) => {
-                            let should_downlink_and_update_ledger = if mhdr.is_join_rejoin() && ans.answer.is_some() {
+                            let should_downlink_and_update_ledger = if mhdr.is_join_rejoin() && ans.answer.is_some() { //consensus fatto tramite blockchain
                                 true
-                            } else if let Some(info) = ans.info {
-                                match Self::consensus_round(&csc, info.nc_list , PrettyHexSlice(&info.dev_addr).to_string(), &transmission.transmission.payload, transmission.arrival_stats.rssi).await {
-                                    Ok(v) => v,
-                                    Err(e) => {
-                                        eprintln!("Consensus error: {e:?}");
-                                        false
+                            } else if let Some(info) = ans.consensus_info {
+                                if info.nc_list.len() == 1 && info.nc_list[0] == nc_id {
+                                    true
+                                } else {
+                                    match Self::consensus_round(&csc, info.nc_list , PrettyHexSlice(&info.dev_addr).to_string(), &transmission.transmission.payload, transmission.arrival_stats.rssi).await {
+                                        Ok(v) => {
+                                            v
+                                        },
+                                        Err(e) => {
+                                            eprintln!("Consensus error: {e:?}");
+                                            false
+                                        }
                                     }
                                 }
                             } else {
                                 false
                             };
-
                             if should_downlink_and_update_ledger {
                                 if let Some(v) = &ans.answer {
                                     let mut t = Transmission {
@@ -270,7 +279,7 @@ impl NetworkController {
                                         ..Default::default()
                                     };
                                     let bytes = serde_json::to_vec(&t).unwrap();
-                                    t.payload = bytes;
+                                    t.payload = bytes; 
     
                                     let downlink_message = DownlinkSchedulerMessage {
                                         transmission: t,
@@ -292,6 +301,13 @@ impl NetworkController {
                                             eprintln!("Error creating uplink with answer: {e:?}")
                                         },
                                     };
+                                } else {
+                                    let (keys, dev_eui) = ans.session_derivation_info.unwrap();
+                                    let k = keys.iter().map(AsRef::as_ref).collect::<Vec<&str>>();
+                                    match c.session_generation(k, &dev_eui).await {
+                                        Ok(_) => println!("Session generated successfully"),
+                                        Err(v) => eprintln!("Error generating session: {v:?}"),
+                                    }
                                 }
                             }
                         },                        
@@ -337,7 +353,7 @@ impl NetworkController {
                                         //TODO fixare i parametri
                                         let should_downlink_and_update_ledger = if mhdr.is_join_rejoin() && ans.answer.is_some() {
                                             true
-                                        } else if let Some(info) = ans.info {
+                                        } else if let Some(info) = ans.consensus_info {
                                             match Self::consensus_round(&csc, info.nc_list, PrettyHexSlice(&info.dev_addr).to_string(), &packet.transmission.payload, packet.arrival_stats.rssi).await {
                                                 Ok(v) => v,
                                                 Err(e) => {

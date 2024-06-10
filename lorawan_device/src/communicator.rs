@@ -1,7 +1,5 @@
 use std::{hash::Hash, time::{Duration, SystemTime, UNIX_EPOCH}};
 
-use pyo3::prelude::*;
-
 use lorawan::{
     physical_parameters::{LoRaBandwidth, CodeRate, SpreadingFactor},
     utils::{errors::LoRaWANError, eui::EUI64},
@@ -67,44 +65,6 @@ impl From<std::io::Error> for CommunicatorError {
         CommunicatorError::TCP(value)
     }
 }
-
-#[derive(Debug, Default, Clone)]
-pub struct PyLoRaPacket {
-    pub payload: Vec<u8>,
-    pub src: u16,
-    pub dst: u16,
-    pub seqn: u8,
-    pub hdr_ok: u8,
-    pub has_crc: u8,
-    pub crc_ok: u8,
-    pub cr: u8,
-    pub ih: u8,
-    pub sf: u8,
-    pub bw: f32,
-    pub rssi: f32,
-    pub snr: f32,
-}
-
-impl<'source> FromPyObject<'source> for PyLoRaPacket {
-    fn extract(ob: &'source PyAny) -> PyResult<Self> {
-        Ok(Self {
-            payload: ob.getattr("payload")?.extract()?,
-            src: ob.getattr("src")?.extract()?,
-            dst: ob.getattr("dst")?.extract()?,
-            seqn: ob.getattr("seqn")?.extract()?,
-            hdr_ok: ob.getattr("hdr_ok")?.extract()?,
-            has_crc: ob.getattr("has_crc")?.extract()?,
-            crc_ok: ob.getattr("crc_ok")?.extract()?,
-            cr: ob.getattr("cr")?.extract()?,
-            ih: ob.getattr("ih")?.extract()?,
-            sf: ob.getattr("SF")?.extract()?,
-            bw: ob.getattr("BW")?.extract()?,
-            rssi: ob.getattr("rssi")?.extract()?,
-            snr: ob.getattr("snr")?.extract()?,
-        })
-    }
-}
-
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Position {
@@ -215,28 +175,5 @@ impl Hash for ReceivedTransmission {
 impl ReceivedTransmission {
     pub fn time_on_air(&self) -> u128 {
         self.transmission.time_on_air()
-    }
-}
-
-impl From<PyLoRaPacket> for ReceivedTransmission {
-    fn from(packet: PyLoRaPacket) -> Self {
-        Self {
-            transmission: Transmission {
-                start_position: Position { x: 0.0, y: 0.0, z: 0.0 },
-                start_time: 0,
-                frequency: 868_000_000.0,
-                bandwidth: packet.bw.into(),
-                spreading_factor: SpreadingFactor::new(packet.sf),
-                code_rate: CodeRate::CR4_5,
-                starting_power: packet.rssi,
-                uplink: false,
-                payload: packet.payload,
-            },
-            arrival_stats: ArrivalStats {
-                time: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(),
-                rssi: packet.rssi,
-                snr: packet.snr,
-            },
-        }
     }
 }

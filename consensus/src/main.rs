@@ -1,5 +1,5 @@
 use std::{net::SocketAddr, time::Duration};
-use consensus::{consensus_server::{ConsensusConfig, ConsensusServer}, get_addr, ConsensusCerts, ConsensusMessage};
+use consensus::{consensus_server::{ConsensusConfig, ConsensusServer}, get_addr, malicious_consensus_server::MaliciousConsensusServer, ConsensusCerts, ConsensusMessage};
 use tokio::sync::mpsc::{Receiver, Sender};
 use openssl::sha::Sha256;
 
@@ -17,11 +17,24 @@ impl MockServer {
             certs,
         };
 
-        let consensus_sender = ConsensusServer::run_instance(id.clone(), config).unwrap();
-        MockServer {
-            msg_receiver,
-            consensus_sender,
+        let i = id.split('.').next().unwrap()[4..].parse::<u32>().unwrap();
+        if i >= NUM_NC - 5 {
+            println!("Malicious node {}", id);
+            let consensus_sender = MaliciousConsensusServer::run_instance(id.clone(), config).unwrap();
+            MockServer {
+                msg_receiver,
+                consensus_sender,
+            }
+            
+        } else {
+            println!("Benign node {}", id);
+            let consensus_sender = ConsensusServer::run_instance(id.clone(), config).unwrap();
+            MockServer {
+                msg_receiver,
+                consensus_sender,
+            }
         }
+
     }
 
     pub async fn run(&mut self) {

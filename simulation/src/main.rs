@@ -2,40 +2,56 @@
 mod chirpstack;
 mod compiled;
 
-use std::{fs::{self, File, OpenOptions}, io::BufReader, time::{Duration, SystemTime}};
-use blockchain_api::{BlockchainClient, exec_bridge::BlockchainExeClient};
+use blockchain_api::{ udp_bridge::BlockchainUDPClient, BlockchainClient};
+use std::{
+    fs::{self, File, OpenOptions}, io::BufReader, sync::Arc, time::{Duration, SystemTime}
+};
 
-use lorawan_device::{configs::{DeviceConfig, UDPDeviceConfig}, devices::{debug_device::DebugDevice, udp_device::UDPDevice}};
-use lorawan::{utils::{eui::EUI64, PrettyHexSlice}, device::{Device, DeviceClass, LoRaWANVersion}, regional_parameters::region::{Region, RegionalParameters}, encryption::key::Key};
+use lorawan::{
+    device::{Device, DeviceClass, LoRaWANVersion},
+    encryption::key::Key,
+    regional_parameters::region::{Region, RegionalParameters},
+    utils::{eui::EUI64, PrettyHexSlice},
+};
+use lorawan_device::{
+    configs::{DeviceConfig, UDPDeviceConfig},
+    devices::{debug_device::DebugDevice, udp_device::UDPDevice},
+};
 use serde::Deserialize;
-use tokio::{task::JoinHandle, time::Instant};
 use std::io::Write;
+use tokio::{task::JoinHandle, time::Instant};
 
 const NUM_DEVICES: usize = 8000;
 const NUM_PACKETS: usize = 100;
-const RANDOM_JOIN_DELAY:   u64 = 18000;
+const RANDOM_JOIN_DELAY: u64 = 18000;
 const FIXED_JOIN_DELAY: u64 = 600;
 const FIXED_PACKET_DELAY: u64 = 600;
 const RANDOM_PACKET_DELAY: u64 = 17400;
 const _CONFIRMED_AVERAGE_SEND: u8 = 10;
 const DEVICES_TO_SKIP: usize = 0;
-const JUST_CREATE_DEVICE: bool = false;
+const JUST_CREATE_DEVICE: bool = true;
 const STARTING_DEV_NONCE: u32 = 30;
-
-
 
 #[derive(Deserialize)]
 struct DevicesFile {
-    devices: Vec<DeviceConfig>
+    devices: Vec<DeviceConfig>,
 }
 
 async fn create_all_devices() {
-    let content: DevicesFile = serde_json::from_reader(BufReader::new(File::open("./devices.json").unwrap())).unwrap();//fs::read_to_string("./devices.json").unwrap();
-    let client = BlockchainExeClient::new("orderer1.orderers.dlwan.phd:6050", "lorawan", "lorawan", None);
+    let content: DevicesFile =
+        serde_json::from_reader(BufReader::new(File::open("./devices.json").unwrap())).unwrap();
+    //fs::read_to_string("./devices.json").unwrap();
+    //let client = BlockchainExeClient::new(
+    //    "orderer1.orderers.dlwan.phd:6050",
+    //    "lorawan",
+    //    "lorawan",
+    //    None,
+    //);
     let mut join_handlers: Vec<JoinHandle<()>> = Vec::new();
+    let nclient = Arc::new(BlockchainUDPClient::new(9999));
 
     for (i, d) in content.devices.iter().map(|e| e.configuration).enumerate() {
-        let cloned = client.clone();
+        let cloned = nclient.clone();
         std::thread::sleep(Duration::from_millis(100));
 
         if join_handlers.len() > 100 {
@@ -45,13 +61,14 @@ async fn create_all_devices() {
             join_handlers = Vec::new();
         }
         join_handlers.push(tokio::spawn(async move {
-            match cloned.get_device(d.dev_eui()).await {
-                Ok(d) => println!("Device {} already exists", d.dev_eui()),
-                Err(_e) => {
-                    match cloned.create_device_config(&d).await {
-                        Ok(_) => println!("[{i}] Device {} created successfully", PrettyHexSlice(&**d.dev_eui())),
-                        Err(e) => println!("Failed to create device config: {e:?}"),
-                    }
+            match cloned.get_device_config(d.dev_eui()).await {
+                Ok(d) => println!("Device {} already exists", d.dev_eui),
+                Err(_e) => match cloned.create_device_config(&d).await {
+                    Ok(_) => println!(
+                        "[{i}] Device {} created successfully",
+                        PrettyHexSlice(&**d.dev_eui())
+                    ),
+                    Err(e) => println!("Failed to create device config: {e:?}"),
                 },
             }
         }));
@@ -62,7 +79,6 @@ async fn create_all_devices() {
     }
 }
 
-
 async fn blockchain_main() {
     if JUST_CREATE_DEVICE {
         create_all_devices().await;
@@ -71,7 +87,6 @@ async fn blockchain_main() {
     //let _args = Args::parse();
     //let path = Path::new("./output/simulation.lock");
     //File::create(path).unwrap();
-    
 
     let file_content = fs::read_to_string("./devices_augmented.csv").unwrap();
 
@@ -79,11 +94,9 @@ async fn blockchain_main() {
 
     //let (sender, receiver) = mpsc::channel::<Msg>(NUM_PACKETS);
 
-
     //tokio::spawn(async move {
     //    stats_holder(receiver).await
     //});
-
 
     let nc_ips = [
         "10.207.19.155",
@@ -102,75 +115,121 @@ async fn blockchain_main() {
         //"10.207.19.24",
         //"10.207.19.212",
         //"10.207.19.102",
-    ].map(|a| a.to_string());
+    ]
+    .map(|a| a.to_string());
 
     let nc_ips_len = nc_ips.len();
 
-    file_content.split('\n').skip(DEVICES_TO_SKIP).take(NUM_DEVICES).enumerate().for_each(|(i, line)| {
-        let splitted = line.split(',').collect::<Vec<&str>>();
-        let dev_eui = EUI64::from_hex(splitted[0]).unwrap();
-        let join_eui = EUI64::from_hex(splitted[1]).unwrap();
-        let key = Key::from_hex(splitted[2]).unwrap();
-        
-        let nc_ip = nc_ips[i % nc_ips_len].clone();
+    file_content
+        .split('\n')
+        .skip(DEVICES_TO_SKIP)
+        .take(NUM_DEVICES)
+        .enumerate()
+        .for_each(|(i, line)| {
+            let splitted = line.split(',').collect::<Vec<&str>>();
+            let dev_eui = EUI64::from_hex(splitted[0]).unwrap();
+            let join_eui = EUI64::from_hex(splitted[1]).unwrap();
+            let key = Key::from_hex(splitted[2]).unwrap();
 
+            let nc_ip = nc_ips[i % nc_ips_len].clone();
 
-        let handle = tokio::spawn(async move {
-            let thread_id = i;
-            let d = Device::new(DeviceClass::A, Some(RegionalParameters::new(Region::EU863_870)), dev_eui, join_eui, key, key, LoRaWANVersion::V1_0_4);
-            let mut device = DebugDevice::from(UDPDevice::create(d, &UDPDeviceConfig {
-                addr: nc_ip,
-                port: 9090,
-            }).await);
+            let handle = tokio::spawn(async move {
+                let thread_id = i;
+                let d = Device::new(
+                    DeviceClass::A,
+                    Some(RegionalParameters::new(Region::EU863_870)),
+                    dev_eui,
+                    join_eui,
+                    key,
+                    key,
+                    LoRaWANVersion::V1_0_4,
+                );
+                let mut device = DebugDevice::from(
+                    UDPDevice::create(
+                        d,
+                        &UDPDeviceConfig {
+                            addr: nc_ip,
+                            port: 9090,
+                        },
+                    )
+                    .await,
+                );
 
-            device.set_dev_nonce(STARTING_DEV_NONCE);
+                device.set_dev_nonce(STARTING_DEV_NONCE);
 
-            let mut sleep_time: u64 = rand::random::<u64>() % RANDOM_JOIN_DELAY;
-            for _ in 0..NUM_PACKETS {
-                sleep_time = rand::random::<u64>() % RANDOM_JOIN_DELAY;
-                tokio::time::sleep(Duration::from_secs(FIXED_JOIN_DELAY + sleep_time)).await;
-         
-                //if let Some(_s) = device.session() {
-                //    println!("Device already initialized:");
-                //} else {
-                //    println!(
-                //        "Device {} needs initialization, sending join request...",
-                //        device.dev_eui()
-                //    );
+                let mut sleep_time: u64 = rand::random::<u64>() % RANDOM_JOIN_DELAY;
+                for _ in 0..NUM_PACKETS {
+                    sleep_time = rand::random::<u64>() % RANDOM_JOIN_DELAY;
+                    tokio::time::sleep(Duration::from_secs(FIXED_JOIN_DELAY + sleep_time)).await;
+
+                    //if let Some(_s) = device.session() {
+                    //    println!("Device already initialized:");
+                    //} else {
+                    //    println!(
+                    //        "Device {} needs initialization, sending join request...",
+                    //        device.dev_eui()
+                    //    );
                     if let Err(e) = device.send_join_request().await {
                         panic!("Error joining: {e:?}");
                     };
-                    println!("Initialized: {}", /*serde_json::to_string(&*device).unwrap()*/ PrettyHexSlice(device.session().unwrap().network_context().dev_addr()));
-                //}
-            }
-
-            tokio::time::sleep(Duration::from_secs(FIXED_JOIN_DELAY + RANDOM_JOIN_DELAY - sleep_time)).await;
-            //device.session_mut().unwrap().application_context_mut().update_af_cnt_dwn(10);            
-            
-            for i in 0..NUM_PACKETS {
-                let sleep_time = rand::random::<u64>() % RANDOM_PACKET_DELAY;
-                tokio::time::sleep(Duration::from_secs(FIXED_PACKET_DELAY + sleep_time)).await;
-                let before = Instant::now();                
-                
-                let confirmed = true;
-                device.send_uplink(Some(format!("###  {}confirmed {i} message  ###", if confirmed {"un"} else {""}).as_bytes()), confirmed, Some(1), None).await.unwrap();
-                let rtt = before.elapsed().as_millis();
-                println!("Device {} sent and received {i}-th message", dev_eui);
-
-                if true {
-                    let mut file = OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open("/root/rtt_response_times.csv")
-                    .expect("Failed to open file");
-                    writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), rtt).expect("Error while logging time to file");
+                    println!(
+                        "Initialized: {}",
+                        /*serde_json::to_string(&*device).unwrap()*/
+                        PrettyHexSlice(device.session().unwrap().network_context().dev_addr())
+                    );
+                    //}
                 }
-            }
-            println!("Task {thread_id} completed successfully");
+
+                tokio::time::sleep(Duration::from_secs(
+                    FIXED_JOIN_DELAY + RANDOM_JOIN_DELAY - sleep_time,
+                ))
+                .await;
+                //device.session_mut().unwrap().application_context_mut().update_af_cnt_dwn(10);
+
+                for i in 0..NUM_PACKETS {
+                    let sleep_time = rand::random::<u64>() % RANDOM_PACKET_DELAY;
+                    tokio::time::sleep(Duration::from_secs(FIXED_PACKET_DELAY + sleep_time)).await;
+                    let before = Instant::now();
+
+                    let confirmed = true;
+                    device
+                        .send_uplink(
+                            Some(
+                                format!(
+                                    "###  {}confirmed {i} message  ###",
+                                    if confirmed { "un" } else { "" }
+                                )
+                                .as_bytes(),
+                            ),
+                            confirmed,
+                            Some(1),
+                            None,
+                        )
+                        .await
+                        .unwrap();
+                    let rtt = before.elapsed().as_millis();
+                    println!("Device {} sent and received {i}-th message", dev_eui);
+
+                    if true {
+                        let mut file = OpenOptions::new()
+                            .append(true)
+                            .create(true)
+                            .open("/root/rtt_response_times.csv")
+                            .expect("Failed to open file");
+                        writeln!(
+                            file,
+                            "{},{}",
+                            SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(),
+                            rtt
+                        )
+                        .expect("Error while logging time to file");
+                    }
+                }
+                println!("Task {thread_id} completed successfully");
+            });
+            join_handlers.push(handle);
         });
-        join_handlers.push(handle);
-    });
-    
+
     for handle in join_handlers {
         handle.await.unwrap();
     }
@@ -183,7 +242,6 @@ fn main() {
         .unwrap()
         .block_on(blockchain_main())
 }
-
 
 /*
 #[derive(Debug)]
@@ -214,13 +272,13 @@ async fn stats_holder(mut receiver: mpsc::Receiver<Msg>) {
     let mut rtt_file = File::create(rtt_path).unwrap();
 
     let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis();
-    
+
     let sls_path = format!("./output/simulation_stats_{timestamp}.csv");
 
     let usage_live_stats_path = Path::new(&sls_path);
     let mut usage_stats_file = File::create(usage_live_stats_path).unwrap();
     writeln!(usage_stats_file, "timestamp,name,cpu,ram,n_i_diff,n_o_diff").unwrap();
-    
+
     writeln!(rtt_file, "thread_id,rtt,tmst").unwrap();
 
     while let Some(msg) = receiver.recv().await {
@@ -247,7 +305,7 @@ async fn network_live_stats_loop(sender: mpsc::Sender<Msg>) {
         .split('\n').map(|line| {
             line.trim()
         }).collect::<Vec<&str>>();
-    
+
     let num_entities = entities_names.len();
 
     let mut last_input = vec![0_usize; num_entities];
@@ -273,7 +331,7 @@ async fn network_live_stats_loop(sender: mpsc::Sender<Msg>) {
             let name = ncr_vec[0];
             let cpu = ncr_vec[1];
             let ram = ncr_vec[2];
-            
+
             let command = format!("docker exec {name} sh -c 'cat /proc/net/dev' | grep eth0 | awk {{'print $2 \",\" $10'}}");
             let output = SyncCommand::new("sh")
                     .args(["-c", command.as_str()])
@@ -283,7 +341,7 @@ async fn network_live_stats_loop(sender: mpsc::Sender<Msg>) {
             let in_out = stdout.trim().split(',').map(|v| v.parse().unwrap()).collect::<Vec<usize>>();
             let ni = in_out[0];
             let no = in_out[1];
-            
+
             let n_i_diff = ni - last_input[i];
             let n_o_diff = no - last_output[i];
             last_input[i] = ni;
@@ -291,12 +349,12 @@ async fn network_live_stats_loop(sender: mpsc::Sender<Msg>) {
 
             format!("{},{name},{cpu},{ram},{n_i_diff},{n_o_diff}", start.elapsed().as_millis())
         }).collect::<Vec<String>>();
-        
+
         for line in content {
             sender.send(Msg {
                 stats: Stats::Usage,
                 thread_id: 0,
-                content: line 
+                content: line
             }).await.unwrap();
         }
     }

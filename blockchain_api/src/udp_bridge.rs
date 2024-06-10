@@ -6,12 +6,13 @@ use serde_json::json;
 use tokio::net::UdpSocket;
 use std::io::Write;
 
-use crate::{BlockchainDeviceConfig, BlockchainDeviceSession, BlockchainError, BlockchainPacket, BlockchainState};
+use crate::{BlockchainDeviceConfig, BlockchainDeviceSession, BlockchainError, BlockchainPacket, BlockchainState, HyperledgerJoinDeduplicationAns};
 
 #[derive(Serialize, Deserialize)]
 pub struct BlockchainUDPAns<T> {
     ok: bool,
-    content: Option<T>
+    content: Option<T>,
+    error_message: Option<String>,
 }
 
 pub struct BlockchainUDPClient {
@@ -63,13 +64,13 @@ impl crate::BlockchainClient for BlockchainUDPClient {
             writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
         }
 
-        let BlockchainUDPAns {ok, content} = serde_json::from_str::<BlockchainUDPAns<BlockchainDeviceSession>>(std::str::from_utf8(&vec[..recvd]).unwrap()).map_err(|e| {
+        let BlockchainUDPAns {ok, content, error_message} = serde_json::from_str::<BlockchainUDPAns<BlockchainDeviceSession>>(std::str::from_utf8(&vec[..recvd]).unwrap()).map_err(|e| {
             println!("{e}");
             BlockchainError::JSONParsingError
         })?;
         
         if !ok {
-            Err(BlockchainError::GenericError("API server returned an error".to_string()))
+            Err(BlockchainError::GenericError(error_message.unwrap()))
         } else {
             Ok(content.unwrap())
         }
@@ -100,13 +101,13 @@ impl crate::BlockchainClient for BlockchainUDPClient {
             writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
         }
 
-        let BlockchainUDPAns {ok, content} = serde_json::from_str::<BlockchainUDPAns<BlockchainDeviceConfig>>(std::str::from_utf8(&vec[..recvd]).unwrap()).map_err(|e| {
+        let BlockchainUDPAns {ok, content, error_message} = serde_json::from_str::<BlockchainUDPAns<BlockchainDeviceConfig>>(std::str::from_utf8(&vec[..recvd]).unwrap()).map_err(|e| {
             println!("{e}");
             BlockchainError::JSONParsingError
         })?;
         
         if !ok {
-            Err(BlockchainError::GenericError("API server returned an error".to_string()))
+            Err(BlockchainError::GenericError(error_message.unwrap()))
         } else {
             Ok(content.unwrap())
         }
@@ -144,20 +145,19 @@ impl crate::BlockchainClient for BlockchainUDPClient {
         })?;
         
         if !ans.ok {
-            Err(BlockchainError::GenericError("API server returned an error".to_string()))
+            Err(BlockchainError::GenericError(ans.error_message.unwrap()))
         } else {
             Ok(())
         }
     }
 
-    async fn join_procedure(&self, join_request: &[u8], join_accept: &[u8], nc_id: &str, dev_eui: &EUI64) -> Result<bool,BlockchainError> {
+    async fn join_procedure(&self, join_request: &[u8], join_accept: &[u8], dev_eui: &EUI64) -> Result<HyperledgerJoinDeduplicationAns,BlockchainError> {
         let sock = UdpSocket::bind("127.0.0.1:0").await.map_err(|_| BlockchainError::Error("Cannot connect to "))?;
 
         let v = json!({
             "type": "join_procedure",
             "join_request": join_request,
             "join_accept": join_accept,
-            "nc_id": nc_id,
             "dev_id": dev_eui.to_string()     
         });
 
@@ -178,15 +178,53 @@ impl crate::BlockchainClient for BlockchainUDPClient {
             writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
         }
 
-        let ans = serde_json::from_str::<BlockchainUDPAns<bool>>(std::str::from_utf8(&vec[..recvd]).unwrap()).map_err(|e| {
+        let ans = serde_json::from_str::<BlockchainUDPAns<HyperledgerJoinDeduplicationAns>>(std::str::from_utf8(&vec[..recvd]).unwrap()).map_err(|e| {
             println!("{e}");
             BlockchainError::JSONParsingError
         })?;
         
         if !ans.ok {
-            Err(BlockchainError::GenericError("API server returned an error".to_string()))
+            Err(BlockchainError::GenericError(ans.error_message.unwrap()))
         } else {
             Ok(ans.content.unwrap())
+        }
+    }
+
+    async fn session_generation(&self, keys: Vec<&str>, dev_eui: &str) -> Result<(),BlockchainError> {
+        let sock = UdpSocket::bind("127.0.0.1:0").await.map_err(|_| BlockchainError::Error("Cannot connect to "))?;
+
+        let v = json!({
+            "type": "session_generation",
+            "keys": keys,
+            "dev_eui": dev_eui,
+        });
+
+        sock.send_to(v.to_string().as_bytes(), format!("127.0.0.1:{}", self.port)).await.map_err(|_| BlockchainError::Error("Cannot send data to API server"))?;
+
+        let mut vec = [0_u8; 1024];
+
+        let before = Instant::now();
+        let recvd = sock.recv(&mut vec).await.map_err(|_| BlockchainError::Error("Cannot receive data from API server"))?;
+        let after = Instant::now();
+        
+        if true {
+            let mut file = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(LOG_FILE_PATH)
+            .expect("Failed to open file");
+            writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
+        }
+
+        let ans = serde_json::from_str::<BlockchainUDPAns<()>>(std::str::from_utf8(&vec[..recvd]).unwrap()).map_err(|e| {
+            println!("{e}");
+            BlockchainError::JSONParsingError
+        })?;
+        
+        if !ans.ok {
+            Err(BlockchainError::GenericError(ans.error_message.unwrap()))
+        } else {
+            Ok(())
         }
     }
     
@@ -201,8 +239,42 @@ impl crate::BlockchainClient for BlockchainUDPClient {
     async fn get_all_devices(&self) -> Result<BlockchainState, BlockchainError> {
         unimplemented!("get_all_devices")
     }
-    async fn create_device_config(&self, _device: &Device) -> Result<(), BlockchainError> {
-        unimplemented!("create_device_config")
+    async fn create_device_config(&self, device: &Device) -> Result<(), BlockchainError> {
+        let sock = UdpSocket::bind("127.0.0.1:0").await.map_err(|_| BlockchainError::Error("Cannot connect to "))?;
+
+        let config: BlockchainDeviceConfig = device.into();
+        let v = json!({
+            "type": "create_device_config",
+            "device": config,
+        });
+
+        sock.send_to(v.to_string().as_bytes(), format!("127.0.0.1:{}", self.port)).await.map_err(|_| BlockchainError::Error("Cannot send data to API server"))?;
+
+        let mut vec = [0_u8; 1024];
+
+        let before = Instant::now();
+        let recvd = sock.recv(&mut vec).await.map_err(|_| BlockchainError::Error("Cannot receive data from API server"))?;
+        let after = Instant::now();
+        
+        if true {
+            let mut file = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(LOG_FILE_PATH)
+            .expect("Failed to open file");
+            writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
+        }
+
+        let ans = serde_json::from_str::<BlockchainUDPAns<()>>(std::str::from_utf8(&vec[..recvd]).unwrap()).map_err(|e| {
+            println!("{e}");
+            BlockchainError::JSONParsingError
+        })?;
+        
+        if !ans.ok {
+            Err(BlockchainError::GenericError(ans.error_message.unwrap()))
+        } else {
+            Ok(())
+        }
     }
     async fn delete_device(&self, _dev_eui: &EUI64) -> Result<(), BlockchainError> {
         unimplemented!("delete_device")

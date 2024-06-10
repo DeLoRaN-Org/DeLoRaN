@@ -1,7 +1,6 @@
-use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use openssl::{nid::Nid, sha::Sha256, x509::X509};
-use serde::{Deserialize, Serialize};
 use tokio::{
     sync::{
         mpsc::{Receiver, Sender},
@@ -14,6 +13,7 @@ use tonic::{
     Request, Response,
 };
 
+use crate::consensus_server::ConsensusConfig;
 #[allow(unused)]
 use crate::{
     consensus_client::ConsensusClient,
@@ -31,29 +31,29 @@ use crate::{
 type ConsensusResult<T> = Result<Response<T>, tonic::Status>;
 type Rounds = Arc<RwLock<HashMap<String, Mutex<ConsensusRound>>>>;
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct ConsensusConfig {
-    pub addr: SocketAddr,
-    pub certs: ConsensusCerts,
-}
+//#[derive(Clone, Serialize, Deserialize, Debug)]
+//pub struct ConsensusConfig {
+//    pub addr: SocketAddr,
+//    pub certs: ConsensusCerts,
+//}
 
-pub struct ConsensusServer {
+pub struct MaliciousConsensusServer {
     id: String,
     rounds: Rounds,
     certs: ConsensusCerts,
 }
 
-impl ConsensusServer {
+impl MaliciousConsensusServer {
     fn new(id: String, receiver: Receiver<ConsensusMessage>, certs: ConsensusCerts) -> Self {
         let rounds = Arc::new(RwLock::new(HashMap::new()));
         let cloned_rounds = rounds.clone();
-        tokio::spawn(ConsensusServer::consensus_receiver_broadcaster_routine(
+        tokio::spawn(MaliciousConsensusServer::consensus_receiver_broadcaster_routine(
             cloned_rounds,
             receiver,
             id.clone(),
             certs.clone(),
         ));
-        ConsensusServer { id, rounds, certs }
+        MaliciousConsensusServer { id, rounds, certs }
     }
 
     pub fn run_instance(
@@ -76,7 +76,7 @@ impl ConsensusServer {
                 .map_err(|_| ConsensusError::InvalidTlsConfig)?
                 .timeout(Duration::from_millis(300))
                 .add_service(UplinkDeduplicationConsensusServer::new(
-                    ConsensusServer::new(id, receiver, config.certs),
+                    MaliciousConsensusServer::new(id, receiver, config.certs),
                 ))
                 .serve(config.addr),
         );
@@ -112,12 +112,12 @@ impl ConsensusServer {
             let list = msg.nc_list.clone();
             for nc in list.iter() {
                 if nc != &id {
-                    //let mut client = ConsensusClient::new(format!("https://{}", get_addr(nc)), &certs).await.unwrap();
-                    let mut client = ConsensusClient::new(format!("https://{}:5050", nc), &certs).await.unwrap();
+                    let mut client = ConsensusClient::new(format!("https://{}", get_addr(nc)), &certs).await.unwrap();
+                    //let mut client = ConsensusClient::new(format!("https://{}:5050", nc), &certs).await.unwrap();
                     match client.broadcast_reception(&msg.dev_addr, &msg.packet, msg.rssi).await {
                         Ok(UplinkReceivedDisseminationResponse { answer }) => {
                             if let Some(answer) = answer {
-                                if let Err(_e) = ConsensusServer::broadcast_reception_handler(&id, nc, &rounds, answer, &certs,).await {
+                                if let Err(_e) = MaliciousConsensusServer::broadcast_reception_handler(&id, nc, &rounds, answer, &certs,).await {
                                     //eprintln!("[{id}]: {e:?}");
                                 }
                             }
@@ -176,6 +176,7 @@ impl ConsensusServer {
         let (_, mic) = round.packet.split_at(round.packet.len() - 4);
         let n = u32::from_le_bytes(mic.try_into().expect("It is always 4 bytes long"));
         let threshold = (round.nc_list.len() as f32) * 0.66;
+        println!("{threshold}");
 
         let mut valid_list: Vec<&String> = round.nc_set.iter().filter(|(_,v)| {
             (**v as f32) > threshold
@@ -186,8 +187,8 @@ impl ConsensusServer {
         //TODO double check
 
         //let name = round.nc_list[n as usize % round.nc_list.len()].clone();
-        //println!("Original set: {:?}", round.nc_set);
-        //println!("Checking winner: {name} - {id}\nList: {:?} - index {}", valid_list, n as usize % list_len);
+        println!("Original set: {:?}", round.nc_set);
+        println!("Checking winner: {name} - {id}\nList: {:?} - index {}", valid_list, n as usize % list_len);
         name == id
     }
 
@@ -229,16 +230,9 @@ impl ConsensusServer {
             if certs.is_empty() {
                 None
             } else {
-                let cert = certs
-                    .iter()
-                    .last()
-                    .expect("Cert should always be present as it is SSL/TLS enabled");
-                let pem = X509::from_der(cert.get_ref())
-                    .expect("Cert should always be present as it is SSL/TLS enabled");
-                pem.subject_name()
-                    .entries()
-                    .find(|name| name.object().nid() == Nid::COMMONNAME)
-                    .map(|name| String::from_utf8_lossy(name.data().as_slice()).into_owned())
+                let cert = certs .iter().last().expect("Cert should always be present as it is SSL/TLS enabled");
+                let pem = X509::from_der(cert.get_ref()).expect("Cert should always be present as it is SSL/TLS enabled");
+                pem.subject_name().entries().find(|name| name.object().nid() == Nid::COMMONNAME).map(|name| String::from_utf8_lossy(name.data().as_slice()).into_owned())
             }
         } else {
             None
@@ -309,7 +303,7 @@ impl ConsensusServer {
     ) -> Result<Response<UplinkReceivedDisseminationResponse>, tonic::Status> {
         //println!("{} received a dissemination message from {}", id, src);
 
-        match ConsensusServer::check_round(rounds, &r, src).await {
+        match MaliciousConsensusServer::check_round(rounds, &r, src).await {
             Err(e) => {
                 if e == ConsensusError::NCAlreadyInSet {
                     Ok(Response::new(UplinkReceivedDisseminationResponse {
@@ -320,7 +314,7 @@ impl ConsensusServer {
                 }
             }
             Ok(_) => {
-                let added = ConsensusServer::add_nc_to_set(rounds, &r.dev_addr, src).await;
+                let added = MaliciousConsensusServer::add_nc_to_set(rounds, &r.dev_addr, src).await;
                 if !added {
                     return Err(tonic::Status::unauthenticated(
                         "Not part of the consensus round",
@@ -334,7 +328,7 @@ impl ConsensusServer {
                         .ok_or(tonic::Status::aborted("No round found"))?;
                     let inner_round = round.lock().await;
                     let packet = &inner_round.packet;
-                    ConsensusServer::create_dissemination_request(
+                    MaliciousConsensusServer::create_dissemination_request(
                         &r.dev_addr,
                         packet,
                         *inner_round
@@ -344,14 +338,23 @@ impl ConsensusServer {
                     )
                 };
 
-                if ConsensusServer::is_round_full(rounds, &r.dev_addr).await {
+                if MaliciousConsensusServer::is_round_full(rounds, &r.dev_addr).await {
                     let (nc_list, nc_set) = {
                         let rounds = rounds.read().await;
                         let round = rounds.get(&r.dev_addr).ok_or(tonic::Status::aborted("No round found"))?;
                         let mut round = round.lock().await;
 
                         round.status = ConsensusState::ReceivingSets;
-                        (round.nc_list.clone(), round.nc_set.clone())
+                        
+                        //let mut set = round.nc_set.clone();
+                        //let keys = set.keys().cloned().collect::<Vec<String>>();
+                        //for k in keys {
+                        //    if k != id {
+                        //        set.remove(&k);
+                        //    }
+                        //}
+                        let set = HashMap::from([(src.to_string(), 1)]);
+                        (round.nc_list.clone(), set)
                     };
 
                     let rounds = rounds.clone();
@@ -366,13 +369,13 @@ impl ConsensusServer {
                                 //    ca_cert_path: format!("/home/rastafan/Documenti/Dottorato/code/DeLoRaN/lorawan-blockchain/pure_network/crypto-config/peerOrganizations/org1.dlwan.phd/peers/{}/tls/ca.crt", id_cloned),
                                 //};
 
-                                //let mut client = ConsensusClient::new(format!("https://{}", get_addr(&nc)), &certs_cloned).await.unwrap();
-                                let mut client = ConsensusClient::new( format!("https://{}:5050", nc), &certs_cloned, ).await.unwrap();
+                                let mut client = ConsensusClient::new(format!("https://{}", get_addr(&nc)), &certs_cloned).await.unwrap();
+                                //let mut client = ConsensusClient::new( format!("https://{}:5050", nc), &certs_cloned, ).await.unwrap();
                                 match client .broadcast_nc_set(r.dev_addr.clone(), nc_set.clone()).await {
                                     Err(_e) => {} //eprintln!("[{id_cloned}]: {:?}", e),
                                     Ok(r) => {
                                         if let Some(answer) = r.answer {
-                                            if let Err(_e) = ConsensusServer::broadcast_nc_set_handler( &id_cloned, nc, &rounds, answer, ) .await {
+                                            if let Err(_e) = MaliciousConsensusServer::broadcast_nc_set_handler( &id_cloned, nc, &rounds, answer, ) .await {
                                                 //eprintln!("[{id_cloned}]: {:?}", e)
                                             }
                                         }
@@ -399,18 +402,16 @@ impl ConsensusServer {
 
         let result = {
             let rounds = rounds.read().await;
-            let mut round = rounds
-                .get(&r.dev_addr)
-                .ok_or(tonic::Status::aborted("No round found"))?
-                .lock()
-                .await;
-            let nc_set = round.nc_set.clone();
+            let mut round = rounds .get(&r.dev_addr).ok_or(tonic::Status::aborted("No round found"))?.lock().await;
+            //let nc_set = round.nc_set.clone();
+            let nc_set = HashMap::from([(src.clone(), 1)]);
 
-            match ConsensusServer::check_dissemination_set_request(src, &r, &mut round).await {
+
+            match MaliciousConsensusServer::check_dissemination_set_request(src, &r, &mut round).await {
                 Ok(ended) => {
                     let mut winner = false;
                     if ended {
-                        winner = ConsensusServer::is_winner(id, &round).await;
+                        winner = MaliciousConsensusServer::is_winner(id, &round).await;
                     }
                     Ok((nc_set, ended, winner))
                 }
@@ -421,7 +422,7 @@ impl ConsensusServer {
         match result {
             Ok((nc_set, ended, winner)) => {
                 if ended {
-                    if let Some(round) = ConsensusServer::end_round(rounds, &r.dev_addr).await {
+                    if let Some(round) = MaliciousConsensusServer::end_round(rounds, &r.dev_addr).await {
                         if let Err(e) = round.sender.send(winner) {
                             println!("Unable to send consensus answer, it was {e}")
                         };
@@ -448,24 +449,24 @@ impl ConsensusServer {
 }
 
 #[tonic::async_trait]
-impl UplinkDeduplicationConsensus for ConsensusServer {
+impl UplinkDeduplicationConsensus for MaliciousConsensusServer {
     async fn broadcast_reception(&self,request: Request<UplinkReceivedDisseminationRequest>,) -> ConsensusResult<UplinkReceivedDisseminationResponse> {
-        let name = ConsensusServer::extract_cn_from_certificate(request.peer_certs());
+        let name = MaliciousConsensusServer::extract_cn_from_certificate(request.peer_certs());
         if let Some(name) = name {
             //println!("{} received a broadcast reception from {}", self.id, name);
             let rounds = &self.rounds;
-            ConsensusServer::broadcast_reception_handler( &self.id, &name, rounds, request.into_inner(), &self.certs, ).await
+            MaliciousConsensusServer::broadcast_reception_handler( &self.id, &name, rounds, request.into_inner(), &self.certs, ).await
         } else {
             Err(tonic::Status::unauthenticated("No certificate provided"))
         }
     }
 
     async fn broadcast_nc_set(&self,request: Request<ReceptionSetDisseminationRequest>,) -> ConsensusResult<ReceptionSetDisseminationResponse> {
-        let name = ConsensusServer::extract_cn_from_certificate(request.peer_certs());
+        let name = MaliciousConsensusServer::extract_cn_from_certificate(request.peer_certs());
         if let Some(name) = name {
             //println!("{} received a broadcast nc_set from {}", self.id, name);
             let r = request.into_inner();
-            ConsensusServer::broadcast_nc_set_handler(&self.id, name, &self.rounds, r).await
+            MaliciousConsensusServer::broadcast_nc_set_handler(&self.id, name, &self.rounds, r).await
         } else {
             Err(tonic::Status::unauthenticated("No certificate provided"))
         }
