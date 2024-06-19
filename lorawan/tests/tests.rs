@@ -236,6 +236,8 @@ mod tests {
 
         let buffer = packet.to_bytes_with_context(&device).unwrap();
 
+        println!("{}", serde_json::to_string_pretty(&packet).unwrap());
+
         println!("{}", PrettyHexSlice(&buffer));
     }
 
@@ -307,6 +309,8 @@ mod tests {
 
         println!("{device}");
 
+        println!("{}", serde_json::to_string_pretty(&packet).unwrap());
+
         let packet_bytes = packet.to_bytes_with_context(&device);
 
         match packet_bytes {
@@ -330,6 +334,10 @@ mod tests {
             device.dev_nonce_autoinc() as u16,
         );
         let packet = LoRaWANPacket::new(mhdr, Payload::JoinRequest(payload));
+
+        println!("{}", serde_json::to_string_pretty(&packet).unwrap());
+
+
         let content = packet.to_bytes_with_context(&device).unwrap();
 
         println!("{}", PrettyHexSlice(&content));

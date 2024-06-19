@@ -1,7 +1,9 @@
-use crate::{device::Device, utils::{errors::LoRaWANError, traits::ToBytesWithContext, self}, encryption::{key::Key, aes_128_encrypt_with_padding}};
+use serde::{Deserialize, Serialize};
+
+use crate::{device::Device, encryption::{aes_128_encrypt, key::Key}, utils::{self, errors::LoRaWANError, traits::ToBytesWithContext}};
 use super::fhdr::FHDR;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct MACPayload {
     //at least 7 bytes -- Max len is region specific and specified in chapter 6
     fhdr: FHDR,
@@ -24,17 +26,19 @@ impl MACPayload {
         utils::pad_to_16(payload);
         let packet_counter: [u8; 4] = counter.to_le_bytes();
 
+        let mut block: [u8; CHUNK_SIZE] = [
+            0x1, 
+            0, 0, 0, 0, 
+            direction_byte,
+            dev_addr[3], dev_addr[2], dev_addr[1], dev_addr[0],
+            packet_counter[0], packet_counter[1], packet_counter[2], packet_counter[3],
+            0 , 0
+        ];
+
         for (index, chunk) in payload.chunks_mut(CHUNK_SIZE).enumerate() {
-            let mut block = vec![
-                0x1, 
-                0, 0, 0, 0, 
-                direction_byte,
-                dev_addr[3], dev_addr[2], dev_addr[1], dev_addr[0],
-                packet_counter[0], packet_counter[1], packet_counter[2], packet_counter[3],
-                0 , (index + 1) as u8
-            ];
+            block[15] = (index + 1) as u8;
             
-            let enc_block= aes_128_encrypt_with_padding(key, &mut block)?;
+            let enc_block= aes_128_encrypt(key, &block)?;
             for (b1,b2) in chunk.iter_mut().zip(enc_block.iter())  {
                 *b1 ^= *b2;
             }

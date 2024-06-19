@@ -260,7 +260,7 @@ async fn device_routine<T: LoRaWANCommunicator + Send + Sync>(mut fd: LoRaWANDev
             match mtype {
                 MType::JoinAccept => {
                     //println!("{i}: Received join_accept: {}", PrettyHexSlice(payload));
-                    match LoRaWANPacket::from_bytes(payload, Some(&*fd), false) {
+                    match LoRaWANPacket::from_bytes(payload, Some(&fd), false) {
                         Err(err) => {
                             //eprintln!("{i}: {err:?}");
                             continue;

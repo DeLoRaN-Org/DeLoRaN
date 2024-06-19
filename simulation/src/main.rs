@@ -1,8 +1,9 @@
-#![allow(non_snake_case, unreachable_code, clippy::iter_skip_zero)]
+#![allow(non_snake_case, unreachable_code, clippy::iter_skip_zero, unused)]
 mod chirpstack;
 mod compiled;
 
 use blockchain_api::{ udp_bridge::BlockchainUDPClient, BlockchainClient};
+use chirpstack::main_chirpstack;
 use std::{
     fs::{self, File, OpenOptions}, io::BufReader, sync::Arc, time::{Duration, SystemTime}
 };
@@ -240,7 +241,8 @@ fn main() {
         .enable_all()
         .build()
         .unwrap()
-        .block_on(blockchain_main())
+        //.block_on(blockchain_main())
+        .block_on(main_chirpstack())
 }
 
 /*

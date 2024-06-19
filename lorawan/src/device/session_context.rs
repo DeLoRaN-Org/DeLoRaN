@@ -3,7 +3,7 @@ use std::{convert::TryInto, fmt::Display};
 use serde::{Serialize, Deserialize};
 
 use crate::{
-    encryption::{aes_128_encrypt_with_padding, key::Key},
+    encryption::{aes_128_encrypt, aes_128_encrypt_with_padding, key::Key},
     utils::{errors::LoRaWANError, eui::EUI64, PrettyHexSlice},
 };
 
@@ -56,7 +56,7 @@ impl NetworkSessionContext {
 
         if opt_neg {
             let eui = *join_eui;
-            let mut block = vec![
+            let mut block = [
                 0x01,
                 join_nonce[2],
                 join_nonce[1],
@@ -76,15 +76,15 @@ impl NetworkSessionContext {
             ];
 
             let fnwk_s_int_key: Key =
-                aes_128_encrypt_with_padding(nwk_key, &mut block)?.try_into()?;
+                aes_128_encrypt(nwk_key, &block)?.try_into()?;
 
             block[0] = 0x03;
             let snwk_s_int_key: Key =
-                aes_128_encrypt_with_padding(nwk_key, &mut block)?.try_into()?;
+                aes_128_encrypt(nwk_key, &block)?.try_into()?;
 
             block[0] = 0x04;
             let nwk_s_enc_key: Key =
-                aes_128_encrypt_with_padding(nwk_key, &mut block)?.try_into()?;
+                aes_128_encrypt(nwk_key, &block)?.try_into()?;
 
             Ok(Self {
                 fnwk_s_int_key,
@@ -97,7 +97,7 @@ impl NetworkSessionContext {
                 rj_count0: 0,
             })
         } else {
-            let mut block = vec![
+            let block = [
                 0x01,
                 join_nonce[2],
                 join_nonce[1],
@@ -117,7 +117,7 @@ impl NetworkSessionContext {
             ];
 
             let fnwk_s_int_key: Key =
-                aes_128_encrypt_with_padding(nwk_key, &mut block)?.try_into()?;
+                aes_128_encrypt(nwk_key, &block)?.try_into()?;
 
             Ok(Self {
                 fnwk_s_int_key,
@@ -233,9 +233,9 @@ impl ApplicationSessionContext {
     ) -> Result<Self, LoRaWANError> {
         let dev_nonce_block: [u8; 2] = (dev_nonce as u16).to_be_bytes();
 
-        let mut block = if opt_neg {
+        let block = if opt_neg {
             let eui = *join_eui;
-            vec![
+            [
                 0x02,
                 join_nonce[2], join_nonce[1], join_nonce[0],
                 eui[7], eui[6], eui[5], eui[4], eui[3], eui[2], eui[1], eui[0],
@@ -243,7 +243,7 @@ impl ApplicationSessionContext {
                 0, 0,
             ]
         } else {
-            vec![
+            [
                 0x02,
                 join_nonce[2], join_nonce[1], join_nonce[0],
                 net_id[2], net_id[1], net_id[0],
@@ -252,7 +252,7 @@ impl ApplicationSessionContext {
             ]
         };
 
-        let app_s_key: Key = aes_128_encrypt_with_padding(app_key, &mut block)?.try_into()?;
+        let app_s_key: Key = aes_128_encrypt(app_key, &block)?.try_into()?;
 
         Ok(Self {
             app_s_key,

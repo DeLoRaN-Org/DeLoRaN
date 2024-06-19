@@ -1,5 +1,7 @@
 use std::convert::TryInto;
 
+use serde::{Deserialize, Serialize};
+
 use crate::{device::{Device, LoRaWANVersion}, utils::{errors::LoRaWANError, traits::{ToBytes, ToBytesWithContext}}, encryption::{self, aes_128_decrypt_with_padding, aes_128_encrypt_with_padding}};
 
 use self::{mac_payload::MACPayload, mhdr::{MHDR, MType}, payload::Payload, join::{JoinAcceptPayload, RejoinRequestPayload, JoinRequestPayload}};
@@ -11,7 +13,7 @@ pub mod mac_payload;
 pub mod payload;
 pub mod mhdr;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct LoRaWANPacket {
     mhdr: MHDR,
     payload: Payload,
@@ -139,7 +141,7 @@ impl LoRaWANPacket {
 
     fn extract_join_request_mic(device_context: &Device, full_buffer: &[u8]) -> Result<[u8;4], LoRaWANError> {
         let key = device_context.network_key();
-        Ok(encryption::extract_mic(key, full_buffer)?)
+        encryption::extract_mic(key, full_buffer)
     }
 
     fn extract_join_accept_mic(join_accept: &JoinAcceptPayload, device_context: &Device, full_buffer: &[u8]) -> Result<[u8;4], LoRaWANError> {
@@ -166,7 +168,7 @@ impl LoRaWANPacket {
             RejoinRequestPayload::T1(_) => device_context.join_context().js_int_key(),
             RejoinRequestPayload::T02(_) => device_context.session().ok_or(LoRaWANError::SessionContextMissing)?.network_context().snwk_s_int_key(),
         };
-        Ok(encryption::extract_mic(key, full_buffer)?)
+        encryption::extract_mic(key, full_buffer)
     }
 
     fn extract_mic(&self, device_context: &Device, full_buffer: &[u8]) -> Result<[u8;4], LoRaWANError> {

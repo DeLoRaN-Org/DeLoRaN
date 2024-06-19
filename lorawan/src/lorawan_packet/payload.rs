@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use super::{
     join::{JoinAcceptPayload, JoinRequestPayload, RejoinRequestPayload},
     mac_payload::MACPayload,
@@ -8,7 +10,7 @@ use crate::{
 };
 use std::fmt::Debug;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Payload {
     JoinRequest(JoinRequestPayload),
     JoinAccept(JoinAcceptPayload),

@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 use crate::utils::traits::ToBytes;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Major {
     R1,  //0
     RFU, // 1
@@ -22,7 +24,7 @@ impl Default for Major {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MType {
     JoinRequest,
     JoinAccept,
@@ -58,7 +60,7 @@ impl Default for MType {
 }
 
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 ///1 byte :: 3 bits for mtype | 3 bits for rfu | 2 bits for major
 pub struct MHDR {
     mtype: MType,

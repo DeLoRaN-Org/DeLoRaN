@@ -40,7 +40,7 @@ impl JoinRequestType {
     }
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct JoinAcceptPayload {
     join_req_type: JoinRequestType,
 
@@ -186,7 +186,7 @@ impl ToBytes for JoinAcceptPayload {
     }
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct JoinRequestPayload {
     join_eui: EUI64,
     dev_eui: EUI64,
@@ -248,7 +248,7 @@ impl ToBytes for JoinRequestPayload {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RejoinRequestPayload {
     T1(ReJoinRequest1),
     T02(ReJoinRequest02),
@@ -284,7 +284,7 @@ impl ToBytes for RejoinRequestPayload {
     }
 }
 
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default, Debug, Serialize, Deserialize)]
 pub struct ReJoinRequest02 {
     is_type_zero: bool,
 
@@ -337,7 +337,7 @@ impl ToBytes for ReJoinRequest02 {
     }
 }
 
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default, Debug, Serialize, Deserialize)]
 pub struct ReJoinRequest1 {
     join_eui: EUI64,
     dev_eui: EUI64,
@@ -371,14 +371,20 @@ impl ReJoinRequest1 {
 
 impl ToBytes for ReJoinRequest1 {
     fn to_bytes(&self) -> Vec<u8> {
-        let mut ret = vec![1];
-        let mut join_eui_reversed = *self.join_eui;
-        join_eui_reversed.reverse(); 
-        let mut dev_eui_reversed = *self.dev_eui;
-        dev_eui_reversed.reverse();
+        let total_size = 1 + self.join_eui.len() + self.dev_eui.len() + std::mem::size_of::<u16>();
+        let mut ret = Vec::with_capacity(total_size);
+        ret.push(1);
+        ret.extend(self.join_eui.iter().rev());
+        ret.extend(self.dev_eui.iter().rev());
 
-        ret.extend_from_slice(&join_eui_reversed);
-        ret.extend_from_slice(&dev_eui_reversed);
+        //let mut ret = vec![1];
+        //let mut join_eui_reversed = *self.join_eui;
+        //join_eui_reversed.reverse(); 
+        //let mut dev_eui_reversed = *self.dev_eui;
+        //dev_eui_reversed.reverse();
+        //ret.extend_from_slice(&join_eui_reversed);
+        //ret.extend_from_slice(&dev_eui_reversed);
+
         ret.extend_from_slice(&self.rj_count1.to_le_bytes());
         ret
     }
