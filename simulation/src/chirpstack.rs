@@ -1,4 +1,4 @@
-#![allow(non_snake_case, unused)]
+//#![allow(non_snake_case, unused)]
 
 use std::{collections::HashMap, time::{Duration, Instant, SystemTime}, fs::File, path::Path, process::Command as SyncCommand};
 
@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use tokio::{sync::mpsc, process::Command};
 use std::io::Write;
 
-use crate::{compiled::gw::{UplinkFrame, UplinkTxInfo, Modulation, modulation::Parameters, LoraModulationInfo, UplinkRxInfo, DownlinkFrame}, RANDOM_JOIN_DELAY, RANDOM_PACKET_DELAY, FIXED_PACKET_DELAY, NUM_PACKETS, NUM_DEVICES};
+use crate::{compiled::gw::{modulation::Parameters, DownlinkFrame, LoraModulationInfo, Modulation, UplinkFrame, UplinkRxInfo, UplinkTxInfo}, FIXED_PACKET_DELAY, NUM_DEVICES, NUM_PACKETS, RANDOM_JOIN_DELAY, RANDOM_PACKET_DELAY, STARTING_DEV_NONCE};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct DeviceStatus {
@@ -122,7 +122,7 @@ async fn network_live_stats_loop(sender: mpsc::Sender<Msg>) {
     let mut last_input = vec![0_usize; num_entities];
     let mut last_output = vec![0_usize; num_entities];
 
-    let usage_lock_path = Path::new("./output/simulation.lock");
+    //let usage_lock_path = Path::new("./output/simulation.lock");
 
     let start = Instant::now();
     loop {
@@ -188,7 +188,7 @@ fn create_uplink(payload: &[u8]) -> UplinkFrame {
             }),
         }),
         rx_info: Some(UplinkRxInfo {
-            gateway_id: "06b302c2f002cfa3".to_owned(),
+            gateway_id: "3a4e0b1d81fd9a21".to_owned(),
             uplink_id: rand::random(),
             time: None,
             time_since_gps_epoch: None,
@@ -211,14 +211,14 @@ fn create_uplink(payload: &[u8]) -> UplinkFrame {
 async fn device_routine<T: LoRaWANCommunicator + Send + Sync>(mut fd: LoRaWANDevice<T>, i: usize, sender: mpsc::Sender<Msg>, start: Instant) {
     //println!("{fd:?}");
     let client = Client::new("tcp://127.0.0.1:1883").unwrap();
-    let down_topic = "eu868/gateway/06b302c2f002cfa3/command/down";
-    let up_topic = "eu868/gateway/06b302c2f002cfa3/event/up";
+    let down_topic = "eu868/gateway/3a4e0b1d81fd9a21/command/down";
+    let up_topic = "eu868/gateway/3a4e0b1d81fd9a21/event/up";
 
     client.connect(None).unwrap();
     client.subscribe(down_topic, paho_mqtt::QOS_1).unwrap();
     let receiver = client.start_consuming();
 
-    fd.set_dev_nonce(39);
+    fd.set_dev_nonce(STARTING_DEV_NONCE);
 
     let mut sleep_time: u64 = rand::random::<u64>() % RANDOM_JOIN_DELAY;
     tokio::time::sleep(Duration::from_secs(sleep_time)).await;
@@ -256,7 +256,7 @@ async fn device_routine<T: LoRaWANCommunicator + Send + Sync>(mut fd: LoRaWANDev
             //    msgs.insert(PrettyHexSlice(payload).to_string());
             //}
             
-            let mtype = LoRaWANPacket::extract_mtype(payload[0]);
+            let mtype = MType::from(payload[0]);
             match mtype {
                 MType::JoinAccept => {
                     //println!("{i}: Received join_accept: {}", PrettyHexSlice(payload));
@@ -323,7 +323,7 @@ async fn device_routine<T: LoRaWANCommunicator + Send + Sync>(mut fd: LoRaWANDev
                             sender.send(Msg { thread_id: i, stats: Stats::Rtt, content: format!("{}, {}",before.elapsed().as_millis(), start.elapsed().as_millis()) }).await.unwrap();
                             if let Payload::MACPayload(dd) = decrypted.into_payload() {
                                 let payload: Vec<u8> = format!("ProvaProvaProva {i}").into();
-                                let uplink = fd.create_uplink(Some(&payload), true, Some(1), None).unwrap();
+                                let uplink = fd.create_uplink(Some(&payload), false, Some(1), None).unwrap();
                                 let uplink = create_uplink(&uplink).encode_to_vec();
         
                                 sleep_time = rand::random::<u64>() % RANDOM_PACKET_DELAY;
@@ -376,11 +376,12 @@ pub async fn main_chirpstack() {
     let ans = client.get("http://127.0.0.1:8090/api/devices")
         .query(&[
             //("applicationId","17272d19-e169-49a4-82e7-fa8ae17439ad"),
-            ("applicationId","b8d129fe-1d37-4944-beed-ad500e00aa95"),
-            ("limit","400"),
+            //("applicationId","b8d129fe-1d37-4944-beed-ad500e00aa95"),
+            ("applicationId","913104eb-f143-4883-900d-883f3d55f471"),
+            ("limit", &format!("{}", NUM_DEVICES)),
         ])
         .header("Accept", "application/json")
-        .header("Grpc-Metadata-Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJjaGlycHN0YWNrIiwiaXNzIjoiY2hpcnBzdGFjayIsInN1YiI6ImFlYzhmNzE5LWI0Y2MtNDNhYi05ZWEyLWQ0YWZmYWY3MzNlYSIsInR5cCI6ImtleSJ9.Rx5-zIhjZSeUPCEqFfZkjll7acfjc-4cyFOLPnrNPS8")
+        .header("Grpc-Metadata-Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJjaGlycHN0YWNrIiwiaXNzIjoiY2hpcnBzdGFjayIsInN1YiI6IjYyZWFjZDljLTE4ZGQtNGI2MC1iYzk3LTMwMTczODE2Zjc0YSIsInR5cCI6ImtleSJ9.0vUyoswx-OOdXG3PfoTCRDQbjZtUMkLDtHHIsHmLIDs")
         //.header("Grpc-Metadata-Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJjaGlycHN0YWNrIiwiaXNzIjoiY2hpcnBzdGFjayIsInN1YiI6IjE0NzA3ZWQ2LTU4YzYtNDdkMS04OWQ0LTgzNjRiMjkzMDllYSIsInR5cCI6ImtleSJ9.B7m6iadZRCfr5mH7v5V1ig79GVr8X8Aw7RpboovZ7ow")
         //.header("applicationId", "52f14cd4-c6f1-4fbd-8f87-4025e1d49242")
         //.header("tenantId", "917c0850-0ae2-4a1b-b716-f6df37bb732b")
@@ -395,10 +396,12 @@ pub async fn main_chirpstack() {
     for (i, d )in content.result.iter().enumerate() {
         let ans = client.get(format!("http://127.0.0.1:8090/api/devices/{}/keys", d.devEui))
         .header("Accept", "application/json")
-        .header("Grpc-Metadata-Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJjaGlycHN0YWNrIiwiaXNzIjoiY2hpcnBzdGFjayIsInN1YiI6ImFlYzhmNzE5LWI0Y2MtNDNhYi05ZWEyLWQ0YWZmYWY3MzNlYSIsInR5cCI6ImtleSJ9.Rx5-zIhjZSeUPCEqFfZkjll7acfjc-4cyFOLPnrNPS8")
+        //.header("Grpc-Metadata-Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJjaGlycHN0YWNrIiwiaXNzIjoiY2hpcnBzdGFjayIsInN1YiI6ImFlYzhmNzE5LWI0Y2MtNDNhYi05ZWEyLWQ0YWZmYWY3MzNlYSIsInR5cCI6ImtleSJ9.Rx5-zIhjZSeUPCEqFfZkjll7acfjc-4cyFOLPnrNPS8")
+        .header("Grpc-Metadata-Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJjaGlycHN0YWNrIiwiaXNzIjoiY2hpcnBzdGFjayIsInN1YiI6IjYyZWFjZDljLTE4ZGQtNGI2MC1iYzk3LTMwMTczODE2Zjc0YSIsInR5cCI6ImtleSJ9.0vUyoswx-OOdXG3PfoTCRDQbjZtUMkLDtHHIsHmLIDs")
         .send().await.unwrap();
 
         let text = ans.text().await.unwrap();
+        println!("{text}");
         let device: ChirpstackDevice = serde_json::from_str(&text).unwrap();
         //println!("{device:#?}");
 
@@ -416,7 +419,7 @@ pub async fn main_chirpstack() {
             port: 9999,
         }).await;
         lorawan_devices.push(fd);
-        println!("Got {i} device");
+        println!("Got {} device", i + 1);
     }
 
     let mut handles = Vec::new();

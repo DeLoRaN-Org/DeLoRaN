@@ -36,6 +36,21 @@ pub enum MType {
     Proprietary,
 }
 
+impl From<u8> for MType {
+    fn from(byte: u8) -> Self {
+        match byte {
+            0b00000000 => MType::JoinRequest,
+            0b00100000 => MType::JoinAccept,
+            0b01000000 => MType::UnconfirmedDataUp,
+            0b01100000 => MType::UnconfirmedDataDown,
+            0b10000000 => MType::ConfirmedDataUp,
+            0b10100000 => MType::ConfirmedDataDown,
+            0b11000000 => MType::RejoinRequest,
+            _          => MType::Proprietary,
+        }
+    }
+}
+
 impl ToBytes for MType {
     fn to_bytes(&self) -> Vec<u8> {
         let v = match self {

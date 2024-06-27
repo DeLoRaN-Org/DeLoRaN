@@ -22,16 +22,16 @@ use serde::Deserialize;
 use std::io::Write;
 use tokio::{task::JoinHandle, time::Instant};
 
-const NUM_DEVICES: usize = 8000;
+const NUM_DEVICES: usize = 1000;
 const NUM_PACKETS: usize = 100;
-const RANDOM_JOIN_DELAY: u64 = 18000;
-const FIXED_JOIN_DELAY: u64 = 600;
-const FIXED_PACKET_DELAY: u64 = 600;
-const RANDOM_PACKET_DELAY: u64 = 17400;
+const RANDOM_JOIN_DELAY: u64 = 100;
+const FIXED_JOIN_DELAY: u64 = 100;
+const FIXED_PACKET_DELAY: u64 = 100;
+const RANDOM_PACKET_DELAY: u64 = 100;
 const _CONFIRMED_AVERAGE_SEND: u8 = 10;
 const DEVICES_TO_SKIP: usize = 0;
 const JUST_CREATE_DEVICE: bool = true;
-const STARTING_DEV_NONCE: u32 = 30;
+const STARTING_DEV_NONCE: u32 = 3;
 
 #[derive(Deserialize)]
 struct DevicesFile {

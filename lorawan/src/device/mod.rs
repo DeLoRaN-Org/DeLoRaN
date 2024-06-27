@@ -240,18 +240,15 @@ impl Device {
         };
         let mhdr = MHDR::new(mtype, Major::R1);
         
-        let (f_opts_len, fopts) = match fopts {
-            Some(mut v) => {
-                let len = if v.len() > 15 { 15 } else { v.len()};
-                if len == 0 {
-                    (0, None)
-                } else {
-                    v.truncate(len);
-                    (len as u8, Some(v))
-                }
+        let (f_opts_len, fopts) = fopts.map_or((0, None), |mut v| {
+            let len = v.len().min(15);
+            if len > 0 {
+                v.truncate(len);
+                (len as u8, Some(v))
+            } else {
+                (0, None)
             }
-            None => (0, None),
-        };
+        });
         
         let session_context = self.session.as_mut().ok_or(LoRaWANError::SessionContextMissing)?;
         let fctrl = FCtrl::Uplink(UplinkFCtrl::new(true, false, true, false, f_opts_len));
