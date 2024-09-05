@@ -51,6 +51,7 @@ impl DebugDevice {
     }
 }
 
+#[derive(Debug)]
 pub struct DebugCommunicator<T: LoRaWANCommunicator> {
     inner: T,
     id: Option<EUI64>
@@ -134,9 +135,18 @@ impl<T: LoRaWANCommunicator> LoRaWANCommunicator for DebugCommunicator<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct DebugSender<T: LoRaSender> {
     id: Option<EUI64>,
     inner: T
+}
+
+impl <T: LoRaSender> Deref for DebugSender<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
 }
 
 impl <T: LoRaSender + Send + Sync> LoRaSender for DebugSender<T> {
@@ -155,9 +165,18 @@ impl <T: LoRaSender + Send + Sync> LoRaSender for DebugSender<T> {
     
 }
 
+#[derive(Debug)]
 pub struct DebugReceiver<T: LoRaReceiver> {
     id: Option<EUI64>,
     inner: T
+}
+
+impl <T: LoRaReceiver> Deref for DebugReceiver<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
 }
 
 impl <T: LoRaReceiver + Sync + Send> LoRaReceiver for DebugReceiver<T> {

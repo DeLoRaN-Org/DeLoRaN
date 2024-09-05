@@ -322,7 +322,7 @@ impl crate::BlockchainClient for BlockchainHTTPClient {
         todo!("look on phdind")
     }
     
-    async fn session_generation(&self, _keys: Vec<&str>, _dev_eui: &str) -> Result<(),BlockchainError> {
+    async fn session_generation(&self, _keys: &[&str], _dev_eui: &str) -> Result<(),BlockchainError> {
         unimplemented!()
     }
 }

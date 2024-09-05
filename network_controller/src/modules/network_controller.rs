@@ -1,7 +1,8 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
-use blockchain_api::{BlockchainClient, BlockchainError};
+use blockchain_api::{udp_bridge::Logger, BlockchainClient, BlockchainError};
 use consensus::{consensus_server::{ConsensusConfig, ConsensusServer}, ConsensusMessage};
+use lazy_static::lazy_static;
 use lorawan::{device::Device, lorawan_packet::{fctrl::{DownlinkFCtrl, FCtrl}, fhdr::FHDR, join::{JoinAcceptPayload, JoinRequestType}, mac_commands, mac_payload::MACPayload, mhdr::{MType, Major, MHDR}, payload::Payload, LoRaWANPacket}, utils::{errors::LoRaWANError, increment_nonce, nonce_valid, traits::ToBytesWithContext, PrettyHexSlice}};
 use lorawan_device::{communicator::{ReceivedTransmission, Transmission}, configs::UDPNCConfig, devices::udp_device::UDPSender, split_communicator::SplitCommunicator};
 use openssl::sha::sha256;
@@ -30,13 +31,18 @@ pub struct NetworkController {
     consensus_sender: Arc<Sender<ConsensusMessage>>,
 }
 
+lazy_static!(
+    static ref LOGGER: Logger = Logger::new("/root/log.txt", true, false);
+    //static ref HANDLING_TIMES: Logger = Logger::new("/root/handling_times.txt", true, false);
+);
+
 impl NetworkController {
     pub fn new(nc_id: &'static str, consensus_config: ConsensusConfig) -> Self {
 
         let consensus_sender = ConsensusServer::run_instance(nc_id.to_string(), consensus_config).expect("Without consensus server the network controller cannot work");
         Self {
             nc_id,
-            consensus_sender: Arc::new(consensus_sender)
+            consensus_sender: Arc::new(consensus_sender),
         }
     }
 
@@ -67,6 +73,7 @@ impl NetworkController {
                         let dev_addr_sha256 = sha256(&[device.dev_eui().as_slice(), device.join_eui().as_slice(), &jr_p.dev_nonce().to_be_bytes()].concat());
                         dev_addr.copy_from_slice(&dev_addr_sha256[..4]);
 
+                        LOGGER.write(&format!("Creating new session for {}", PrettyHexSlice(&dev_addr))).await;
 
                         let join_accept = JoinAcceptPayload::new(
                             JoinRequestType::JoinRequest, 
@@ -86,6 +93,7 @@ impl NetworkController {
                         let join_accept = packet.to_bytes_with_context(&device).map_err(NCError::from)?;
 
                         let deduplication_ans = bc_client.join_procedure(join_request, &join_accept, jr_p.dev_eui()).await?; 
+                        //println!("Deduplication answer: {deduplication_ans:?}");
                         if deduplication_ans.is_winner(nc_id) {
                             let (_, keys) = deduplication_ans.into_tuple();
                             Ok(DispatchResults {
@@ -108,45 +116,47 @@ impl NetworkController {
 
     async fn handle_unconfirmed_data_up(data_up: &[u8], bc_client: &Arc<impl BlockchainClient>) -> Result<(Device, DispatchResults), NCError> {
         let packet = LoRaWANPacket::from_bytes(data_up, None, true)?;
-        if let Payload::MACPayload(payload) = packet.into_payload() {
+        if let Payload::MACPayload(payload) = packet.payload() {
             let dev_addr = payload.fhdr().dev_addr();
 
-            if let Ok(session) = bc_client.get_device_session(&dev_addr).await {
-                println!("Known-DevAddr({:?})", dev_addr);
-                let fcnt_u16 = payload.fhdr().fcnt();
-                let current_fcnt = session.f_cnt_up;  
-                        
-                let (fcnt_up_valid, _fcnt_up_looped) = nonce_valid(fcnt_u16, current_fcnt as u16);
-                if !fcnt_up_valid { return Err(NCError::InvalidUplink(format!("Invalid fcnt_up, expected > {current_fcnt}, received {fcnt_u16}"))); }
+            match bc_client.get_device_session(&dev_addr).await {
+                Ok(session) => {
+                    let fcnt_u16 = payload.fhdr().fcnt();
+                    let current_fcnt = session.f_cnt_up;  
+                            
+                    let (fcnt_up_valid, _fcnt_up_looped) = nonce_valid(fcnt_u16, current_fcnt as u16);
+                    if !fcnt_up_valid { return Err(NCError::InvalidUplink(format!("Invalid fcnt_up, expected > {current_fcnt}, received {fcnt_u16}"))); }
 
-                let nc_list = session.nc_ids.clone();
-                let device = session.into();
+                    let nc_list = session.nc_ids.clone();
+                    let device = session.into();
 
-                let p = LoRaWANPacket::from_bytes(data_up, Some(&device), true)?; 
-                if let Payload::MACPayload(_mp) = p.payload() {
-                    if payload.is_application() {
-                        //let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-                        //let data_to_send = json!({
-                        //    "payload": (mp.frm_payload().unwrap_or(&Vec::new())),
-                        //    "dev_addr": dev_addr,
-                        //    "tmst": now.as_secs()
-                        //});
-                        //utils::uplink_to_application_server(data_to_send.to_string().as_bytes()).await?;
-                    } else {
-                        let mac_commands = mac_commands::EDMacCommands::from_bytes(&p.payload().to_bytes_with_context(&device).unwrap())?;
-                        println!("{mac_commands:?}");
-                        //TODO analyze mac commands and act accordingly
+                    let p = LoRaWANPacket::from_bytes(data_up, Some(&device), true)?; 
+                    if let Payload::MACPayload(_mp) = p.payload() {
+                        if payload.is_application() {
+                            //let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+                            //let data_to_send = json!({
+                            //    "payload": (mp.frm_payload().unwrap_or(&Vec::new())),
+                            //    "dev_addr": dev_addr,
+                            //    "tmst": now.as_secs()
+                            //});
+                            //utils::uplink_to_application_server(data_to_send.to_string().as_bytes()).await?;
+                        } else {
+                            let mac_commands = mac_commands::EDMacCommands::from_bytes(&p.payload().to_bytes_with_context(&device).unwrap())?;
+                            println!("{mac_commands:?}");
+                            //TODO analyze mac commands and act accordingly
+                        }
                     }
-                }
-                Ok((device, DispatchResults {
-                    session_derivation_info: None,
-                    consensus_info: Some(DownlinkConsensusLedgerUpdateInfo {
-                        dev_addr,
-                        nc_list,
-                    }),
-                    answer: None,
-                }))
-            } else { Err(NCError::UnknownDevAddr(payload.fhdr().dev_addr())) }
+                    Ok((device, DispatchResults {
+                        session_derivation_info: None,
+                        consensus_info: Some(DownlinkConsensusLedgerUpdateInfo {
+                            dev_addr,
+                            nc_list,
+                        }),
+                        answer: None,
+                    }))
+                },
+                Err(e) => Err(NCError::GenericError(format!("Error getting device session: {e:?}"))),
+            }
         } else { Err(NCError::InvalidUplink("Not a MACPayload payload".to_string())) }
     }
 
@@ -166,7 +176,7 @@ impl NetworkController {
         };
         fhdr.set_fcnt(new_value);
 
-        let downlink_payload = Payload::MACPayload(MACPayload::new(fhdr, fport, Some("Confirmed Uplink answer".bytes().collect())));
+        let downlink_payload = Payload::MACPayload(MACPayload::new(fhdr, fport, None));
         let mhdr = MHDR::new(MType::UnconfirmedDataDown, Major::R1);
         let packet = LoRaWANPacket::new(mhdr, downlink_payload);
 
@@ -205,13 +215,15 @@ impl NetworkController {
 
     async fn consensus_round(consensus_send: &Sender<ConsensusMessage>, nc_list: Vec<String>, dev_addr: String, packet: &[u8], rssi: f32) -> Result<bool, NCError> {
         let (consensus_sender, consensus_receiver) = oneshot::channel();
-        consensus_send.send(ConsensusMessage {
+        let message = ConsensusMessage {
             nc_list,
             dev_addr,
             packet: packet.to_owned(),
             rssi: (rssi * 1000.0) as i32,
             response: consensus_sender,
-        }).await.expect("If cannot send to consensus server, the network controller cannot work");
+        };
+        //println!("Sending consensus message {:?}", message);
+        consensus_send.send(message).await.expect("If cannot send to consensus server, the network controller cannot work");
         consensus_receiver.await.map_err(|e| NCError::CommandTransmissionFailed(e.to_string()))
     }
 
@@ -251,8 +263,8 @@ impl NetworkController {
                             let should_downlink_and_update_ledger = if mhdr.is_join_rejoin() && ans.answer.is_some() { //consensus fatto tramite blockchain
                                 true
                             } else if let Some(info) = ans.consensus_info {
-                                if info.nc_list.len() == 1 && info.nc_list[0] == nc_id {
-                                    true
+                                if info.nc_list.len() == 1 {
+                                    info.nc_list[0] == nc_id //se sono l'unico nodo del consensus allora non c'è bisogno di fare il consenso
                                 } else {
                                     match Self::consensus_round(&csc, info.nc_list , PrettyHexSlice(&info.dev_addr).to_string(), &transmission.transmission.payload, transmission.arrival_stats.rssi).await {
                                         Ok(v) => {
@@ -292,10 +304,12 @@ impl NetworkController {
                                     };
                                     dlsc.send(downlink_message).await.unwrap();
                                 }
+
+                                tokio::time::sleep(Duration::from_secs(15)).await;
                                 if !mhdr.is_join_rejoin() {
                                     match c.create_uplink(data, ans.answer.as_deref()).await {
                                         Ok(_) =>  {
-                                            println!("uplink created successfully");
+                                            //println!("uplink created successfully");
                                         }, 
                                         Err(e) => {
                                             eprintln!("Error creating uplink with answer: {e:?}")
@@ -304,9 +318,9 @@ impl NetworkController {
                                 } else {
                                     let (keys, dev_eui) = ans.session_derivation_info.unwrap();
                                     let k = keys.iter().map(AsRef::as_ref).collect::<Vec<&str>>();
-                                    match c.session_generation(k, &dev_eui).await {
-                                        Ok(_) => println!("Session generated successfully"),
-                                        Err(v) => eprintln!("Error generating session: {v:?}"),
+                                    match c.session_generation(&k, &dev_eui).await {
+                                        Ok(_) => {},//println!("Session generated successfully for {dev_eui}"),
+                                        Err(v) => eprintln!("Error generating session: {v:?} for {dev_eui}"),
                                     }
                                 }
                             }

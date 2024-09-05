@@ -1,12 +1,47 @@
-use std::{fs::OpenOptions, net::IpAddr, time::{Instant, SystemTime}};
+use std::{fs::{File, OpenOptions}, net::IpAddr, time::{Instant, SystemTime, UNIX_EPOCH}};
 
 use lorawan::{device::Device, utils::{eui::EUI64, PrettyHexSlice}};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tokio::net::UdpSocket;
+use tokio::{net::UdpSocket, sync::Mutex};
 use std::io::Write;
 
 use crate::{BlockchainDeviceConfig, BlockchainDeviceSession, BlockchainError, BlockchainPacket, BlockchainState, HyperledgerJoinDeduplicationAns};
+
+
+pub struct Logger {
+    log_file: Mutex<File>,
+    active_logger: bool,
+    logger_println: bool,
+}
+
+impl Logger {
+    pub fn new(path: &str, active_logger: bool, logger_println: bool) -> Self {
+        let file = std::fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(path)
+        .expect("Failed to open file");
+        Self {
+            log_file: Mutex::new(file),
+            active_logger,
+            logger_println
+        }
+    }
+
+    pub fn now() -> u128 {
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()
+    }
+
+    pub async fn write(&self, content: &str) {
+        if self.active_logger {
+            writeln!(self.log_file.lock().await, "{}", content).expect("Error while logging to file");
+        }
+        if self.logger_println {
+            println!("{}", content)
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct BlockchainUDPAns<T> {
@@ -17,11 +52,12 @@ pub struct BlockchainUDPAns<T> {
 
 pub struct BlockchainUDPClient {
     port: u16,
+    logger: Logger,
 }
 
 impl BlockchainUDPClient {
     pub fn new(port: u16) -> Self {
-        Self { port }
+        Self { port, logger: Logger::new(LOG_FILE_PATH, true, false) }
     }
 }
 
@@ -55,14 +91,9 @@ impl crate::BlockchainClient for BlockchainUDPClient {
         let recvd = sock.recv(&mut vec).await.map_err(|_| BlockchainError::Error("Cannot receive data from API server"))?;
         let after = Instant::now();
         
-        if false {
-            let mut file = OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(LOG_FILE_PATH)
-            .expect("Failed to open file");
-            writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
-        }
+
+
+        if false { self.logger.write(&format!("{},{}", Logger::now(), (after - before).as_millis())).await; }
 
         let BlockchainUDPAns {ok, content, error_message} = serde_json::from_str::<BlockchainUDPAns<BlockchainDeviceSession>>(std::str::from_utf8(&vec[..recvd]).unwrap()).map_err(|e| {
             println!("{e}");
@@ -92,14 +123,8 @@ impl crate::BlockchainClient for BlockchainUDPClient {
         let recvd = sock.recv(&mut vec).await.map_err(|_| BlockchainError::Error("Cannot receive data from API server"))?;
         let after = Instant::now();
         
-        if false {
-            let mut file = OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(LOG_FILE_PATH)
-            .expect("Failed to open file");
-            writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
-        }
+        if false { self.logger.write(&format!("{},{}", Logger::now(), (after - before).as_millis())).await; }
+
 
         let BlockchainUDPAns {ok, content, error_message} = serde_json::from_str::<BlockchainUDPAns<BlockchainDeviceConfig>>(std::str::from_utf8(&vec[..recvd]).unwrap()).map_err(|e| {
             println!("{e}");
@@ -130,14 +155,8 @@ impl crate::BlockchainClient for BlockchainUDPClient {
         let recvd = sock.recv(&mut vec).await.map_err(|_| BlockchainError::Error("Cannot receive data from API server"))?;
         let after = Instant::now();
         
-        if true {
-            let mut file = OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(LOG_FILE_PATH)
-            .expect("Failed to open file");
-            writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
-        }
+        if true { self.logger.write(&format!("{},{}", Logger::now(), (after - before).as_millis())).await; }
+
 
         let ans = serde_json::from_str::<BlockchainUDPAns<()>>(std::str::from_utf8(&vec[..recvd]).unwrap()).map_err(|e| {
             println!("{e}");
@@ -169,14 +188,7 @@ impl crate::BlockchainClient for BlockchainUDPClient {
         let recvd = sock.recv(&mut vec).await.map_err(|_| BlockchainError::Error("Cannot receive data from API server"))?;
         let after = Instant::now();
         
-        if true {
-            let mut file = OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(LOG_FILE_PATH)
-            .expect("Failed to open file");
-            writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
-        }
+        if true { self.logger.write(&format!("{},{}", Logger::now(), (after - before).as_millis())).await; }
 
         let ans = serde_json::from_str::<BlockchainUDPAns<HyperledgerJoinDeduplicationAns>>(std::str::from_utf8(&vec[..recvd]).unwrap()).map_err(|e| {
             println!("{e}");
@@ -190,7 +202,7 @@ impl crate::BlockchainClient for BlockchainUDPClient {
         }
     }
 
-    async fn session_generation(&self, keys: Vec<&str>, dev_eui: &str) -> Result<(),BlockchainError> {
+    async fn session_generation(&self, keys: &[&str], dev_eui: &str) -> Result<(),BlockchainError> {
         let sock = UdpSocket::bind("127.0.0.1:0").await.map_err(|_| BlockchainError::Error("Cannot connect to "))?;
 
         let v = json!({
@@ -207,14 +219,7 @@ impl crate::BlockchainClient for BlockchainUDPClient {
         let recvd = sock.recv(&mut vec).await.map_err(|_| BlockchainError::Error("Cannot receive data from API server"))?;
         let after = Instant::now();
         
-        if true {
-            let mut file = OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(LOG_FILE_PATH)
-            .expect("Failed to open file");
-            writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
-        }
+        if true { self.logger.write(&format!("{},{}", Logger::now(), (after - before).as_millis())).await; }
 
         let ans = serde_json::from_str::<BlockchainUDPAns<()>>(std::str::from_utf8(&vec[..recvd]).unwrap()).map_err(|e| {
             println!("{e}");

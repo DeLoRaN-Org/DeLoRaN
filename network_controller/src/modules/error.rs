@@ -21,6 +21,8 @@ pub enum NCError {
 
     BlockchainError(BlockchainError),
     ConsensusError(ConsensusError),
+
+    GenericError(String),
 }
 
 impl From<BlockchainError> for NCError {

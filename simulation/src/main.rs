@@ -22,16 +22,16 @@ use serde::Deserialize;
 use std::io::Write;
 use tokio::{task::JoinHandle, time::Instant};
 
-const NUM_DEVICES: usize = 1000;
+const NUM_DEVICES: usize = 2000;
 const NUM_PACKETS: usize = 100;
-const RANDOM_JOIN_DELAY: u64 = 100;
-const FIXED_JOIN_DELAY: u64 = 100;
-const FIXED_PACKET_DELAY: u64 = 100;
-const RANDOM_PACKET_DELAY: u64 = 100;
+const FIXED_JOIN_DELAY: u64 = 60;
+const RANDOM_JOIN_DELAY: u64 = 180;
+const FIXED_PACKET_DELAY: u64 = 60;
+const RANDOM_PACKET_DELAY: u64 = 180;
 const _CONFIRMED_AVERAGE_SEND: u8 = 10;
 const DEVICES_TO_SKIP: usize = 0;
+const STARTING_DEV_NONCE: u32 = 12;
 const JUST_CREATE_DEVICE: bool = true;
-const STARTING_DEV_NONCE: u32 = 3;
 
 #[derive(Deserialize)]
 struct DevicesFile {
@@ -145,16 +145,7 @@ async fn blockchain_main() {
                     key,
                     LoRaWANVersion::V1_0_4,
                 );
-                let mut device = DebugDevice::from(
-                    UDPDevice::create(
-                        d,
-                        &UDPDeviceConfig {
-                            addr: nc_ip,
-                            port: 9090,
-                        },
-                    )
-                    .await,
-                );
+                let mut device = DebugDevice::from(UDPDevice::create(d,&UDPDeviceConfig { addr: nc_ip, port: 9090,}).await);
 
                 device.set_dev_nonce(STARTING_DEV_NONCE);
 
@@ -173,11 +164,7 @@ async fn blockchain_main() {
                     if let Err(e) = device.send_join_request().await {
                         panic!("Error joining: {e:?}");
                     };
-                    println!(
-                        "Initialized: {}",
-                        /*serde_json::to_string(&*device).unwrap()*/
-                        PrettyHexSlice(device.session().unwrap().network_context().dev_addr())
-                    );
+                    println!("Initialized: {}",/*serde_json::to_string(&*device).unwrap()*/PrettyHexSlice(device.session().unwrap().network_context().dev_addr()));
                     //}
                 }
 
@@ -193,37 +180,13 @@ async fn blockchain_main() {
                     let before = Instant::now();
 
                     let confirmed = true;
-                    device
-                        .send_uplink(
-                            Some(
-                                format!(
-                                    "###  {}confirmed {i} message  ###",
-                                    if confirmed { "un" } else { "" }
-                                )
-                                .as_bytes(),
-                            ),
-                            confirmed,
-                            Some(1),
-                            None,
-                        )
-                        .await
-                        .unwrap();
+                    device.send_uplink(Some(format!("###  {}confirmed {i} message  ###",if confirmed { "un" } else { "" }).as_bytes(),),confirmed,Some(1),None,).await.unwrap();
                     let rtt = before.elapsed().as_millis();
                     println!("Device {} sent and received {i}-th message", dev_eui);
 
                     if true {
-                        let mut file = OpenOptions::new()
-                            .append(true)
-                            .create(true)
-                            .open("/root/rtt_response_times.csv")
-                            .expect("Failed to open file");
-                        writeln!(
-                            file,
-                            "{},{}",
-                            SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(),
-                            rtt
-                        )
-                        .expect("Error while logging time to file");
+                        let mut file = OpenOptions::new().append(true).create(true).open("/root/rtt_response_times.csv").expect("Failed to open file");
+                        writeln!(file,"{},{}",SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(),rtt).expect("Error while logging time to file");
                     }
                 }
                 println!("Task {thread_id} completed successfully");

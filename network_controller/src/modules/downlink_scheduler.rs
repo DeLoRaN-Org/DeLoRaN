@@ -52,7 +52,9 @@ impl <T: LoRaSender> DownlinkScheduler<T> {
                 message = self.receiver.recv() => {
                     match message {
                         Some(t) => {
-                            self.message_storage.push(Reverse(t,));
+                            //TODO RISISTEMARE TUTTO COME PRIMA PRE-TESTS
+                            //self.message_storage.push(Reverse(t,));
+                            self.downlink_communicator.send(&t.transmission.payload, t.additional_info).await.unwrap();
                         },
                         None => break,
                     }
@@ -60,7 +62,7 @@ impl <T: LoRaSender> DownlinkScheduler<T> {
                 },
                 _ = tokio::time::sleep_until(self.message_storage.peek().map_or(Instant::now() + Duration::from_millis(100), |v| v.0.moment)), if self.message_storage.peek().is_some() => {
                     if let Some(head) = self.message_storage.pop() {
-                        println!("Sending downlink transmission");
+                        //println!("Sending downlink transmission");
                         self.downlink_communicator.send(&head.0.transmission.payload, head.0.additional_info).await.unwrap();
                     }
                 }

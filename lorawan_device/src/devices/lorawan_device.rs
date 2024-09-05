@@ -33,6 +33,10 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
         &mut self.communicator
     }
 
+    pub fn into_communicator(self) -> T {
+        self.communicator
+    }
+
     fn fold_maccomands(fopts: Option<&[EDMacCommands]>) -> Option<Vec<u8>> {
         fopts.map(|mac_commands| {
             mac_commands.iter()
@@ -57,7 +61,7 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
             //TODO REMOVE PERFORMANCES CHECKS
             //let before = Instant::now();
             tokio::time::sleep(Duration::from_secs(1)).await;
-            let payloads = self.communicator.receive(Some(Duration::from_secs(1))).await?;
+            let payloads = self.communicator.receive(Some(Duration::from_secs(2))).await?;
             //let after = Instant::now();
             
             //let mut file = OpenOptions::new()
@@ -126,7 +130,7 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
         
         self.communicator.send(&join_request, Some(*self.dev_eui()), None).await?;
         tokio::time::sleep(Duration::from_secs(5)).await;
-        let payloads = self.communicator.receive(Some(Duration::from_secs(1))).await?;
+        let payloads = self.communicator.receive(Some(Duration::from_secs(2))).await?;
         
         //TODO ESTRARRE MEGLIO I PAYLOAD
         let content = payloads.first().ok_or(LoRaWANError::MissingDownlink)?;

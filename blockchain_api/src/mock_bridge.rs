@@ -228,7 +228,7 @@ impl BlockchainClient for BlockchainMockClient {
         Ok((IpAddr::V4(Ipv4Addr::LOCALHOST), 1312))
     }
     
-    async fn session_generation(&self, _keys: Vec<&str>, _dev_eui: &str) -> Result<(),BlockchainError> {
+    async fn session_generation(&self, _keys: &[&str], _dev_eui: &str) -> Result<(),BlockchainError> {
         Ok(())
     }
 }

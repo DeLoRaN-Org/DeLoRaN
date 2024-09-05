@@ -125,6 +125,19 @@ impl Hash for Transmission {
     }
 }
 
+impl PartialOrd for Transmission {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.start_time.cmp(&other.start_time))
+    }
+}
+
+impl Ord for Transmission {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.start_time.cmp(&other.start_time)
+    }
+}
+
+
 impl Transmission {
     //https://github.com/avbentem/airtime-calculator/blob/master/doc/LoraDesignGuide_STD.pdf
     pub fn time_on_air(&self) -> u128 {

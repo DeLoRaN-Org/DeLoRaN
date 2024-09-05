@@ -44,7 +44,6 @@ pub struct ColosseumDeviceConfig {
 
 pub struct MockDeviceConfig {}
 
-
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum DeviceConfigType {
     TCP(TcpDeviceConfig),

@@ -452,7 +452,7 @@ impl crate::BlockchainClient for BlockchainExeClient {
         todo!("look on phdind")
     }
     
-    async fn session_generation(&self, keys: Vec<&str>, dev_eui: &str) -> Result<(),BlockchainError> {
+    async fn session_generation(&self, keys: &[&str], dev_eui: &str) -> Result<(),BlockchainError> {
         let transient_data = HashMap::from([
             ("keys", serde_json::to_vec(&keys).unwrap()),
             //("nc_id", nc_id.as_bytes().to_vec()),
