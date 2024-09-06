@@ -176,7 +176,7 @@ impl NetworkController {
         };
         fhdr.set_fcnt(new_value);
 
-        let downlink_payload = Payload::MACPayload(MACPayload::new(fhdr, fport, None));
+        let downlink_payload = Payload::MACPayload(MACPayload::new(fhdr, fport, Some("Blablabla".bytes().collect())));
         let mhdr = MHDR::new(MType::UnconfirmedDataDown, Major::R1);
         let packet = LoRaWANPacket::new(mhdr, downlink_payload);
 
@@ -280,6 +280,7 @@ impl NetworkController {
                                 false
                             };
                             if should_downlink_and_update_ledger {
+                                //println!("Should downlink and update ledger about");
                                 if let Some(v) = &ans.answer {
                                     let mut t = Transmission {
                                         frequency: transmission.transmission.frequency,

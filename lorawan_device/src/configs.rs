@@ -28,7 +28,7 @@ pub struct RadioDeviceConfig {
     pub data_rate: DataRate,
     pub code_rate: CodeRate,
     pub bandwidth: LoRaBandwidth,
-    pub freq: f32,
+    pub freq: f64,
     pub sample_rate: f32,
     pub rx_chan_id: u8,
     pub tx_chan_id: u8,

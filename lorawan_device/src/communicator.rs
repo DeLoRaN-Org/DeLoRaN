@@ -92,7 +92,7 @@ impl Eq for ArrivalStats {}
 pub struct Transmission {
     pub start_position: Position,
     pub start_time: u128,
-    pub frequency: f32,
+    pub frequency: f64,
     pub bandwidth: LoRaBandwidth,
     pub spreading_factor: SpreadingFactor,
     pub code_rate: CodeRate,
