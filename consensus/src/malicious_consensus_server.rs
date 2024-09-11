@@ -9,7 +9,7 @@ use tokio::{
     time::Instant,
 };
 use tonic::{
-    transport::{Certificate, Identity, ServerTlsConfig},
+    transport::{Certificate, CertificateDer, Identity, ServerTlsConfig},
     Request, Response,
 };
 
@@ -224,14 +224,14 @@ impl MaliciousConsensusServer {
     }
 
     pub fn extract_cn_from_certificate(
-        certificates: Option<std::sync::Arc<Vec<Certificate>>>,
+        certificates: Option<std::sync::Arc<Vec<CertificateDer<'_>>>>,
     ) -> Option<String> {
         if let Some(certs) = certificates {
             if certs.is_empty() {
                 None
             } else {
                 let cert = certs .iter().last().expect("Cert should always be present as it is SSL/TLS enabled");
-                let pem = X509::from_der(cert.get_ref()).expect("Cert should always be present as it is SSL/TLS enabled");
+                let pem = X509::from_der(cert).expect("Cert should always be present as it is SSL/TLS enabled");
                 pem.subject_name().entries().find(|name| name.object().nid() == Nid::COMMONNAME).map(|name| String::from_utf8_lossy(name.data().as_slice()).into_owned())
             }
         } else {

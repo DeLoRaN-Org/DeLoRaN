@@ -10,7 +10,7 @@ use tokio::{
     time::Instant,
 };
 use tonic::{
-    transport::{Certificate, Identity, ServerTlsConfig},
+    transport::{Certificate, CertificateDer, Identity, ServerTlsConfig},
     Request, Response,
 };
 
@@ -223,7 +223,7 @@ impl ConsensusServer {
     }
 
     pub fn extract_cn_from_certificate(
-        certificates: Option<std::sync::Arc<Vec<Certificate>>>,
+        certificates: Option<std::sync::Arc<Vec<CertificateDer<'_>>>>,
     ) -> Option<String> {
         if let Some(certs) = certificates {
             if certs.is_empty() {
@@ -233,7 +233,7 @@ impl ConsensusServer {
                     .iter()
                     .last()
                     .expect("Cert should always be present as it is SSL/TLS enabled");
-                let pem = X509::from_der(cert.get_ref())
+                let pem = X509::from_der(cert)
                     .expect("Cert should always be present as it is SSL/TLS enabled");
                 pem.subject_name()
                     .entries()

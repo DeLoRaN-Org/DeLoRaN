@@ -41,6 +41,15 @@ impl Logger {
             println!("{}", content)
         }
     }
+    
+    pub fn write_sync(&self, content: &str) {
+        if self.active_logger {
+            writeln!(self.log_file.blocking_lock(), "{}", content).expect("Error while logging to file");
+        }
+        if self.logger_println {
+            println!("{}", content)
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
