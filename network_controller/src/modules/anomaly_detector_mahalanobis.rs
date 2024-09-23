@@ -1,7 +1,8 @@
-use std::{collections::HashMap, time::Instant};
+use std::collections::HashMap;
 
 use lorawan::physical_parameters::SpreadingFactor;
 use nalgebra::{DMatrix, DVector};
+
 
 #[derive(Debug)]
 pub struct AnomalyDetectorMahalnobis {
@@ -20,20 +21,20 @@ impl AnomalyDetectorMahalnobis {
     }
 
     pub fn update(&mut self, sf: SpreadingFactor, frequency: String, row: &DVector<f64>) {
-        let key = (sf, frequency);
-        let detector = self.mahalnobis.entry(key).or_insert(Mahalnobis::new(self.threshold, self.num_features));
+        let key = (sf, frequency.clone());
+        let detector = self.mahalnobis.entry(key).or_insert(Mahalnobis::new(sf, frequency, self.threshold, self.num_features));
         detector.update(row);
     }
 
     pub fn update_rows(&mut self, sf: SpreadingFactor, frequency: String, data: &[DVector<f64>]) {
-        let key = (sf, frequency);
-        let detector = self.mahalnobis.entry(key).or_insert(Mahalnobis::new(self.threshold, self.num_features));
+        let key = (sf, frequency.clone());
+        let detector = self.mahalnobis.entry(key).or_insert(Mahalnobis::new(sf, frequency, self.threshold, self.num_features));
         detector.update_rows(data);
     }
 
     pub fn is_anomaly(&mut self, sf: SpreadingFactor, frequency: String, row: &DVector<f64>) -> (bool, f64) {
-        let key = (sf, frequency);
-        let detector = self.mahalnobis.entry(key).or_insert(Mahalnobis::new(self.threshold, self.num_features));
+        let key = (sf, frequency.clone());
+        let detector = self.mahalnobis.entry(key).or_insert(Mahalnobis::new(sf, frequency, self.threshold, self.num_features));
         detector.is_anomaly(row)
     }
 
@@ -41,9 +42,9 @@ impl AnomalyDetectorMahalnobis {
         &self.mahalnobis[&(sf, fq)].mean
     }
     
-    pub fn variance(&self, sf: SpreadingFactor, fq: String) -> &DVector<f64> {
-        &self.mahalnobis[&(sf, fq)].variance
-    }
+    //pub fn variance(&self, sf: SpreadingFactor, fq: String) -> &DVector<f64> {
+    //    &self.mahalnobis[&(sf, fq)].variance
+    //}
     
     pub fn get_mahalanobi(&self, sf: SpreadingFactor, fq: String) -> &Mahalnobis {
         &self.mahalnobis[&(sf, fq)]
@@ -56,10 +57,12 @@ impl AnomalyDetectorMahalnobis {
 
 #[derive(Debug)]
 pub struct Mahalnobis {
+    sf: SpreadingFactor,
+    freq: String,
     //id: String,
     mean: DVector<f64>,
-    m2: DVector<f64>,
-    variance: DVector<f64>,
+    //m2: DVector<f64>,
+    //variance: DVector<f64>,
     covariance_matrix: DMatrix<f64>,
     threshold: f64,
     counter: usize,
@@ -67,12 +70,14 @@ pub struct Mahalnobis {
 }
 
 impl Mahalnobis {
-    pub fn new(threshold: f64, num_features: usize) -> Self {
+    pub fn new(sf: SpreadingFactor, fq: String, threshold: f64, num_features: usize) -> Self {
         Mahalnobis {
             //id: format!("{:?}", Instant::now()),
+            //m2: DVector::from_element(num_features, 0.0),
+            //variance: DVector::from_element(num_features, 1.0)
+            sf,
+            freq: fq,
             mean: DVector::from_element(num_features, 0.0),
-            m2: DVector::from_element(num_features, 0.0),
-            variance: DVector::from_element(num_features, 1.0),
             covariance_matrix: DMatrix::from_element(num_features, num_features, 1e-5),
             threshold,
             counter: 0,
@@ -81,25 +86,36 @@ impl Mahalnobis {
     }
 
     pub fn update(&mut self, row: &DVector<f64>) {
-        let tmst = row[2] as u128;
-
-        let mut row_c = row.clone();
-        row_c[2] -= self.last_timestamp as f64;
-
-        //let normalized_row = self.normalize_row(&row_c);
-        self.counter += 1;
-
-        self.update_mean(&row_c);
-        self.update_covariance(&row_c);
+        //let tmst = row[2] as u128;
+        //
+        //if tmst < self.last_timestamp {
+        //    self.last_timestamp = tmst;
+        //    return;
+        //}
+        //
+        //let mut row_c = row.clone();
+        //row_c[2] = (row_c[2] - self.last_timestamp as f64).ln_1p();
         
-        self.last_timestamp = tmst;
+        //println!("{} -- {} -- {}", self.mean, self.covariance_matrix, row_c);
+        //let normalized_row = self.normalize_row(&row_c);
+        
+        self.update_mean(row);
+        self.update_covariance(row);
+        
+        self.counter += 1;
+        //self.last_timestamp = tmst;
+
+        //if row_c[2] > 3000.0 {
+        //    println!("{} -- {} -- {}", self.mean, self.covariance_matrix, row_c);
+        //}
+        
     }
 
-    pub fn normalize_row(&self, row: &DVector<f64>) -> DVector<f64> {
-        let mut std_dev = self.variance.clone();
-        std_dev.apply(|arg0: &mut f64| { *arg0 = f64::sqrt(*arg0); });
-        (row - &self.mean).component_div(&std_dev)
-    }
+    //pub fn normalize_row(&self, row: &DVector<f64>) -> DVector<f64> {
+    //    let mut std_dev = self.variance.clone();
+    //    std_dev.apply(|arg0: &mut f64| { *arg0 = f64::sqrt(*arg0); });
+    //    (row - &self.mean).component_div(&std_dev)
+    //}
 
     pub fn update_rows(&mut self, data: &[DVector<f64>]) {
         for row in data {
@@ -109,37 +125,63 @@ impl Mahalnobis {
     
     pub fn update_mean(&mut self, row: &DVector<f64>) {
         let n = self.counter as f64;
-        let delta = row - &self.mean;
 
-        self.mean += &delta / n;
-
-        let delta2 = row - &self.mean;
-
-        self.m2 += delta.component_mul(&delta2);
-
-        if self.counter > 2 {
-            self.variance = &self.m2 / n;
+        if n <= 2.0 {
+            self.mean = row.clone();
+            return;
         }
+        let old_mean = self.mean.clone();
+        self.mean = &old_mean + (row - &old_mean) / (n + 1.0);
+
+        //let delta = row - &self.mean;
+        //self.mean += &delta / n;
+        //let delta2 = row - &self.mean;
+        //self.m2 += delta.component_mul(&delta2);
+        //if self.counter > 1 {
+        //    self.variance = &self.m2 / n;
+        //}
     }
 
     pub fn update_covariance(&mut self, row: &DVector<f64>) {
         let n = self.counter as f64;
-        let diff = row - &self.mean;
-        let outer_product = &diff * diff.transpose() * (n + 1.0);
-        self.covariance_matrix = outer_product / n;
+        if n <= 2.0 {
+            return;
+        }
+
+        let left_product =  ((n - 1.0)/ (n)) * &self.covariance_matrix;
+        let right_product = (1.0 / n) * (row - &self.mean) * (row - &self.mean).transpose();
+
+        //let diff = row - &self.mean;
+        //let outer_product = &diff * diff.transpose() * (n + 1.0);
+        self.covariance_matrix = &left_product + &right_product;
+        if self.covariance_matrix.data.as_slice().iter().any(|arg0: &f64| f64::is_nan(*arg0)) {
+            println!("{:?}", row);
+            println!("{:?}", self.mean);
+            println!("{:?}", left_product);
+            println!("{:?}", right_product);
+            
+            println!("{:?}", &self.counter);
+            println!("{:?}", &self.covariance_matrix);
+            panic!("Covariance matrix contains NaN values");
+        }
     }
 
     pub fn mahalanobis_distance(&mut self, row: &DVector<f64>) -> f64 {
         //let normalized_row = self.normalize_row(row);
         
-        let regularization = 1e-4;  // A small regularization constant
-        let reg_cov_matrix = &self.covariance_matrix + DMatrix::<f64>::identity(self.covariance_matrix.nrows(), self.covariance_matrix.ncols()) * regularization;
-        let inv_cov = match reg_cov_matrix.clone().try_inverse() {
+        //let regularization = 1e-4;  // A small regularization constant
+        //let reg_cov_matrix = &self.covariance_matrix + DMatrix::<f64>::identity(self.covariance_matrix.nrows(), self.covariance_matrix.ncols()) * regularization;
+        //println!("{} {} - {}", &self.sf, &self.freq, &self.covariance_matrix);
+        let inv_cov = match self.covariance_matrix.clone().try_inverse() {
             Some(inv) => inv,
             None => {
                 println!("{:?}", &self.covariance_matrix);
                 println!("{:?}", &self.covariance_matrix.determinant());
-                panic!("Regularized covariance matrix should be invertible");
+                println!("{:?} - {} - {}", &self.counter, &self.sf, &self.freq);
+                //panic!("Regularized covariance matrix should be invertible");
+                let regularization = 1e-4;  // A small regularization constant
+                let reg_cov_matrix = &self.covariance_matrix + DMatrix::<f64>::identity(self.covariance_matrix.nrows(), self.covariance_matrix.ncols()) * regularization;
+                reg_cov_matrix.try_inverse().expect("Regularized covariance matrix should be invertible")
             }
         };
         //LOGGER2.write_sync(&format!("{:?}", &self.covariance_matrix));
@@ -173,7 +215,7 @@ impl Mahalnobis {
         self.last_timestamp
     }
 
-    pub fn get_variance(&self) -> &DVector<f64> {
-        &self.variance
-    }
+    //pub fn get_variance(&self) -> &DVector<f64> {
+    //    &self.variance
+    //}
 }

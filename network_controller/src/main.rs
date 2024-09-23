@@ -104,9 +104,9 @@ fn test_update_mean() {
 }
 
 fn test_real_data(threshold: f64) -> (f32, f32, f32, f32) {
-    let mut ad = AnomalyDetectorMahalnobis::new(threshold, 3);
+    let mut ad = AnomalyDetectorMahalnobis::new(threshold, 2);
     
-    let path = "/home/rastafan/Documenti/Dottorato/code/DeLoRaN/DeLoRaN/network_controller/transformed_gateway_with_jammer_status.csv";
+    let path = "./transformed_gateway_with_jammer_status.csv";
     let content = fs::read_to_string(path).unwrap();
     let rows = content.lines().collect::<Vec<_>>();
 
@@ -130,33 +130,33 @@ fn test_real_data(threshold: f64) -> (f32, f32, f32, f32) {
         let rssi = values[6].parse::<f32>().unwrap();
         let snr = values[7].parse::<f32>().unwrap();
         let jammer = values[9].parse::<u8>().unwrap() == 1;
-        
+
         row_count += 1;
-        if row_count < 4000 {
-            ad.update(sf, frequency.to_string(), &DVector::from_vec(vec![rssi as f64, snr as f64, time as f64]));
-
-            println!("{}, {:?}, {:?}, {:?}", ad.get_mahalanobi(sf, frequency.to_string()).get_counter(), ad.mean(sf, frequency.to_string()).data.as_slice(), ad.variance(sf, frequency.to_string()).data.as_slice(), ad.covariance_matrix(sf, frequency.to_string()).data.as_slice());
-            continue;
+        if !jammer {
+            ad.update(sf, frequency.to_string(), &DVector::from_vec(vec![rssi as f64, snr as f64]));
+            //ad.update(sf, frequency.to_string(), &DVector::from_vec(vec![rssi as f64, snr as f64, time as f64]));
+            //println!("{}, {:?}, {:?}", ad.get_mahalanobi(sf, frequency.to_string()).get_counter(), ad.mean(sf, frequency.to_string()).data.as_slice(), ad.covariance_matrix(sf, frequency.to_string()).data.as_slice());
         }
 
-        //ad.update(sf, frequency as u64, &DVector::from_vec(vec![rssi as f64, snr as f64, time as f64]));
-        let (is_anomaly, distance) = ad.is_anomaly(sf, frequency.to_string(),&DVector::from_vec(vec![rssi as f64, snr as f64, time as f64]));
-        if !is_anomaly {
-            ad.update(sf, frequency.to_string(), &DVector::from_vec(vec![rssi as f64, snr as f64, time as f64]));
-        }
+        //let (is_anomaly, distance) = ad.is_anomaly(sf, frequency.to_string(),&DVector::from_vec(vec![rssi as f64, snr as f64, time as f64]));
+        //let (is_anomaly, distance) = ad.is_anomaly(sf, frequency.to_string(),&DVector::from_vec(vec![rssi as f64, snr as f64]));
+        //if !is_anomaly {
+        //    ad.update(sf, frequency.to_string(), &DVector::from_vec(vec![rssi as f64, snr as f64]));
+        //    //ad.update(sf, frequency.to_string(), &DVector::from_vec(vec![rssi as f64, snr as f64, time as f64]));
+        //}
         
         //LOGGER.write_sync(&format!("{}, {}, {}, {}", distance, row_count, jammer, is_anomaly));
         row_count += 1;
         
-        match (jammer, is_anomaly) {
-            (true, true) => true_positives += 1,
-            (true, false) => false_negatives += 1,
-            (false, true) => false_positives += 1,
-            (false, false) => true_negatives += 1,
-        }
+        //match (jammer, is_anomaly) {
+        //    (true, true) => true_positives += 1,
+        //    (true, false) => false_negatives += 1,
+        //    (false, true) => false_positives += 1,
+        //    (false, false) => true_negatives += 1,
+        //}
     }
 
-    let path = "/home/rastafan/Documenti/Dottorato/code/DeLoRaN/DeLoRaN/gatewayJammed2.csv";
+    let path = "./transformed_gateway_with_jammer_status.csv";
     let content = fs::read_to_string(path).unwrap();
     let rows = content.lines().collect::<Vec<_>>();
 
@@ -172,16 +172,11 @@ fn test_real_data(threshold: f64) -> (f32, f32, f32, f32) {
         let snr = values[7].parse::<f32>().unwrap();
         let jammer = values[9].parse::<u8>().unwrap() == 1;
 
-        //println!("{}", row_count);
-        //if row_count == 94201 {
-        //    println!("{:?}", ad);
-        //    println!("{:?}", ad.mean(sf, frequency.to_string()));
-        //    println!("{:?}", ad.covariance_matrix(sf, frequency.to_string()));
-        //    println!("{:?}", ad.get_mahalanobi(sf, frequency.to_string()));
-        //}
-        let (is_anomaly, distance) = ad.is_anomaly(sf, frequency.to_string(),&DVector::from_vec(vec![rssi as f64, snr as f64, time as f64]));
+        //let (is_anomaly, distance) = ad.is_anomaly(sf, frequency.to_string(),&DVector::from_vec(vec![rssi as f64, snr as f64, time as f64]));
+        let (is_anomaly, distance) = ad.is_anomaly(sf, frequency.to_string(),&DVector::from_vec(vec![rssi as f64, snr as f64]));
         if !is_anomaly {
-            ad.update(sf, frequency.to_string(), &DVector::from_vec(vec![rssi as f64, snr as f64, time as f64]));
+            //ad.update(sf, frequency.to_string(), &DVector::from_vec(vec![rssi as f64, snr as f64, time as f64]));
+            ad.update(sf, frequency.to_string(), &DVector::from_vec(vec![rssi as f64, snr as f64]));
         }
 
         LOGGER.write_sync(&format!("{}, {}, {}, {}", distance, row_count, jammer, is_anomaly));
@@ -201,14 +196,11 @@ fn test_real_data(threshold: f64) -> (f32, f32, f32, f32) {
     let f1_score = 2.0 * (round_precision * round_recall) / (round_precision + round_recall);
     let round_accuracy = (true_positives + true_negatives) as f32 / (true_positives + true_negatives + false_positives + false_negatives) as f32;
     
-    
-
-
     //println!("Jammer Count: {}, Not Jammer Count: {}", jammer_count, not_jammer_count);
-
     
-    //println!("True Positives: {}, True Negatives: {}, False Positives: {}, False Negatives: {}", true_positives, true_negatives, false_positives, false_negatives);
-    //println!("Precision: {}, Recall: {}, Accuracy: {}, f1: {}", round_precision, round_recall, round_accuracy, f1_score);
+    println!("{:?}", ad);
+    println!("True Positives: {}, True Negatives: {}, False Positives: {}, False Negatives: {}", true_positives, true_negatives, false_positives, false_negatives);
+    println!("Precision: {}, Recall: {}, Accuracy: {}, f1: {}", round_precision, round_recall, round_accuracy, f1_score);
     (
         round_precision,
         round_recall,
@@ -219,8 +211,8 @@ fn test_real_data(threshold: f64) -> (f32, f32, f32, f32) {
 
 
 fn main() {
-    let mut threshold = 1.0;
-    let stop = 1.0;
+    let mut threshold = 5.0;
+    let stop = threshold;
     let step = 0.5;
 
     let mut best_threshold = 0.0;
@@ -244,5 +236,5 @@ fn main() {
         threshold += step;
     }
 
-    //println!("Best Threshold: {}, Precision: {}, Recall: {}, F1: {}, Accuracy: {}", best_threshold, best_precision, best_recall, best_f1, best_accuracy);
+    println!("Best Threshold: {}, Precision: {}, Recall: {}, F1: {}, Accuracy: {}", best_threshold, best_precision, best_recall, best_f1, best_accuracy);
 }
