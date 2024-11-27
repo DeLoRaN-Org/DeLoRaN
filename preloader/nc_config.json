@@ -1,9 +1,18 @@
 {
     "network_controller": {
-        "n_id": "ns_test_1",
-        "tcp_config": {
-            "tcp_dev_port": 9090,
-            "tcp_nc_port": 9091
+        "nc_id": "peer0.org1.dlwan.phd",
+        "orderer_address": "orderer1.orderers.dlwan.phd:6050",
+        "udp_config": {
+            "addr": "0.0.0.0",
+            "port": 9090
+        },
+        "consensus_config": {
+            "addr": "0.0.0.0:5050",
+            "certs": {
+                "cert_path": "/opt/fabric/crypto/peer/tls/server.crt",
+                "key_path": "/opt/fabric/crypto/peer/tls/server.key",
+                "ca_cert_path": "/opt/fabric/crypto/peer/tls/ca.crt"
+            }
         }
     }
 }

@@ -1,27 +1,30 @@
-#![allow(non_snake_case)]
-use std::io::Write;
+use std::fs::OpenOptions;
 use std::net::IpAddr;
-use std::{collections::HashMap, time::{SystemTime, Instant}, fs::OpenOptions};
+use std::time::{Duration, Instant};
+use std::{collections::HashMap, time::SystemTime};
 use lorawan::{utils::{PrettyHexSlice, eui::EUI64}, device::Device};
 use serde::{Serialize, Deserialize};
+use serde_json::Value;
 use tokio::process::Command;
+use std::io::Write;
 
 
-use crate::{BlockchainDeviceSession, BlockchainDeviceConfig, BlockchainState, BlockchainPacket, BlockchainError};
+use crate::{BlockchainDeviceConfig, BlockchainDeviceSession, BlockchainError, BlockchainPacket, BlockchainState, HyperledgerJoinDeduplicationAns};
 
+#[allow(non_snake_case)]
 #[derive(Serialize)]
-struct BlockchainArgs {
+pub struct BlockchainArgs {
     Args: Vec<String>
 }
 
-#[derive(Deserialize)]
-struct BlockchainAns<T> {
+#[derive(Deserialize, Debug)]
+pub struct BlockchainAns<T> {
     content: Option<T>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[allow(dead_code)]
-struct HyperledgerInvokeAns {
+pub struct HyperledgerInvokeAns {
     level: String,
     ts: f32,
     name: String,
@@ -47,7 +50,18 @@ pub struct BlockchainExeClient {
     orderer_ca_file_path: Option<String>,
 }
 
+#[derive(Clone)]
+pub struct BlockchainExeConfig {
+    pub orderer_addr: String,
+    pub channel_name: String,
+    pub chaincode_name: String,
+    pub orderer_ca_file_path: Option<String>,
+}
 
+const STATUS_OK: u16 = 200;
+const STATUS_KEY: &str = "status:";
+const DEFAULT_CAFILE_PATH: &str = "/opt/fabric/crypto/orderer-ca.crt";
+const LOG_FILE_PATH: &str = "/root/API_invoke_times.csv";
 
 impl BlockchainExeClient {
     pub fn new<I>(addr: I, channel_name: I, chaincode_name: I, orderer_ca_file_path: Option<I>) -> BlockchainExeClient
@@ -63,7 +77,7 @@ impl BlockchainExeClient {
         }
     }
 
-    async fn create_command<T: for<'a> Deserialize<'a>>(&self, invoke: bool , args: BlockchainArgs, transient_data: Option<HashMap<&'static str, Vec<u8>>>) -> Result<BlockchainAns<T>, String> {        
+    async fn create_command<T: for<'a> Deserialize<'a>>(&self, invoke: bool , args: BlockchainArgs, transient_data: Option<&HashMap<&'static str, Vec<u8>>>) -> Result<BlockchainAns<T>, String> {        
         let transient_string = if let Some(v) = transient_data { serde_json::to_string(&v).unwrap() } else { String::new() };
         
         let args_string = serde_json::to_string(&args).unwrap();
@@ -76,7 +90,7 @@ impl BlockchainExeClient {
             "-n", &self.chaincode_name,
             "-c", args_string.trim(),
             "--tls",
-            "--cafile", { if let Some(v) = &self.orderer_ca_file_path { v } else {"/opt/fabric/crypto/orderer-ca.crt"} },
+            "--cafile", { if let Some(v) = &self.orderer_ca_file_path { v } else { DEFAULT_CAFILE_PATH } },
             ];
         if !transient_string.is_empty() { peer_args.extend_from_slice(&["--transient", &transient_string]) }
         if invoke { peer_args.push("--waitForEvent") }
@@ -84,22 +98,25 @@ impl BlockchainExeClient {
         //println!("peer {}", peer_args.join(" "));
         //return Err("abbalabba".to_owned());
 
-        //let before = Instant::now();
+        let before = Instant::now();
         let output = Command::new("peer").args(peer_args).output().await.map_err(|e| e.to_string())?;
-        //let after = Instant::now();
+        let after = Instant::now();
         
-        //{
-        //    let mut file = OpenOptions::new()
-        //    .append(true)
-        //    .create(true)
-        //    .open("/root/API_invoke_times.csv")
-        //    .expect("Failed to open file");
-        //    writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
-        //}
+        if true {
+            let mut file = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(LOG_FILE_PATH)
+            .expect("Failed to open file");
+            writeln!(file, "{},{}", SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis(), (after - before).as_millis()).expect("Error while logging time to file");
+        }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
         
+        //println!("stdout: {}", stdout);
+        //println!("stderr: {}", stderr);
+
         if invoke || stdout.is_empty() && !stderr.is_empty() {
             let last_stderr_line = stderr.take_last_line().ok_or("Stderr empty".to_owned())?;
             let ans = serde_json::from_str::<HyperledgerInvokeAns>(&last_stderr_line).or::<String>(Ok(HyperledgerInvokeAns {
@@ -113,14 +130,14 @@ impl BlockchainExeClient {
             let mut key: Option<&str> = None;
             let mut value: Option<&str> = None;
             let status: u16;
-            let msg = ans.msg.split("status:").nth(1).ok_or(format!("Error parsing output, no status found. {last_stderr_line}"))?.trim();
+            let msg = ans.msg.split(STATUS_KEY).nth(1).ok_or(format!("Error parsing output, no status found. {last_stderr_line}"))?.trim();
             let mut success = false;
 
 
             if let Some(index) = msg.find(' ') {
                 let (str_status, message) = msg.split_at(index);
                 status = str_status.parse().unwrap();
-                if status == 200 {
+                if status == STATUS_OK {
                     success = true;
                 }
                 
@@ -135,13 +152,12 @@ impl BlockchainExeClient {
                         key = Some(t_key);
                         value = Some(&t_value[2..=len-2]);
                     } else {
-                        //println!("{}", &t_value[2..=len-2]);
                         return serde_json::from_str::<BlockchainAns<T>>(&t_value[2..=len-2]).map_err(|e| e.to_string());       
                     }
                 }                
             } else {
                 status = msg.parse().unwrap();
-                if status == 200 {
+                if status == STATUS_OK {
                     success = true;
                 }
             }
@@ -149,16 +165,67 @@ impl BlockchainExeClient {
             if success {
                 Ok(BlockchainAns { content: None })
             } else {
-                Err(format!("status: {}, {}: {}", status, key.unwrap_or(""), value.unwrap_or("")))
+                Err(format!("{STATUS_KEY} {}, {}: {}", status, key.unwrap_or(""), value.unwrap_or("")))
             }
         }
-        else { serde_json::from_str::<BlockchainAns<T>>(stdout.trim()).map_err(|e| e.to_string()) }
+        else {
+            serde_json::from_str::<BlockchainAns<T>>(stdout.trim()).or_else(|_| {
+                let a = serde_json::from_str::<Value>(stdout.trim()).unwrap();
+                Ok(BlockchainAns {
+                    content: serde_json::from_str::<T>(a.get("content").unwrap().as_str().unwrap()).ok(),
+                })
+            })
+            //FIXME non era cosi non so che succede, controllare il metodo di creazione dei device
+            //serde_json::from_str::<BlockchainAns<T>>(stdout.trim()).map_err(|e| e.to_string()) 
+        }
     }
 }
 
-#[async_trait::async_trait]
-impl crate::BlockchainClient for BlockchainExeClient {
+
+//TODO Remove, just for convergence times
+impl BlockchainExeClient {
+    pub async fn create_flag(&self) -> Result<(), BlockchainError> {
+        let args = BlockchainArgs {
+            Args: vec![
+                "CreateFlag".to_owned(),
+            ],
+        };
+
+        self.create_command::<()>(true,args, None).await.map_err(BlockchainError::GenericError)?;
+        Ok(())
+    }
     
+    pub async fn clear_flag(&self) -> Result<(), BlockchainError> {
+        let args = BlockchainArgs {
+            Args: vec![
+                "ClearFlag".to_owned(),
+            ],
+        };
+
+        self.create_command::<()>(true,args, None).await.map_err(BlockchainError::GenericError)?;
+        Ok(())
+    }
+
+    pub async fn get_flag(&self) -> Result<String,BlockchainError> {
+        let args = BlockchainArgs {
+            Args: vec![
+                "ReadFlag".to_owned(),
+            ],
+        };
+
+        self.create_command(false,args, None).await
+        .map_err(BlockchainError::GenericError)?
+        .content.ok_or(BlockchainError::MissingContent)
+    }
+}
+
+impl crate::BlockchainClient for BlockchainExeClient {
+    type Config = BlockchainExeConfig;
+
+    async fn from_config(config: &Self::Config) -> Result<Box<Self>, BlockchainError> {
+        Ok(Box::new(Self::new(config.orderer_addr.clone(), config.channel_name.clone(), config.chaincode_name.clone(), config.orderer_ca_file_path.clone())))
+    }
+
     async fn get_hash(&self) -> Result<String, BlockchainError> {
         let args = BlockchainArgs {
             Args: vec![
@@ -190,7 +257,7 @@ impl crate::BlockchainClient for BlockchainExeClient {
         &self,
         dev_eui: &EUI64,
     ) -> Result<BlockchainDeviceConfig, BlockchainError> {
-        let str_dev_eui = PrettyHexSlice(&**dev_eui).to_string();
+        let str_dev_eui = dev_eui.to_string();
         let args = BlockchainArgs {
             Args: vec![
                 "ReadDeviceConfig".to_owned(),
@@ -266,11 +333,10 @@ impl crate::BlockchainClient for BlockchainExeClient {
         Ok(())
     }
     
-    async fn create_uplink(&self, packet: &[u8], answer: Option<&[u8]>, n_id: &str) -> Result<(),BlockchainError> {
+    async fn create_uplink(&self, packet: &[u8], answer: Option<&[u8]>) -> Result<(),BlockchainError> {
         let date = format!("{}",SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis());
         let mut transient_data = HashMap::from([
             ("packet", packet.to_vec()),
-            ("n_id", n_id.as_bytes().to_vec()),
             ("date", date.as_bytes().to_vec()),
         ]);
         if let Some(b) = answer {
@@ -283,9 +349,67 @@ impl crate::BlockchainClient for BlockchainExeClient {
             ],
         };
 
-        self.create_command::<()>(true,args, Some(transient_data)).await.map_err(BlockchainError::GenericError)?;
+        self.create_command::<()>(true,args, Some(&transient_data)).await.map_err(BlockchainError::GenericError)?;
         Ok(())
     }
+
+    async fn join_procedure(&self, join_request: &[u8], join_accept: &[u8], dev_eui: &EUI64) -> Result<HyperledgerJoinDeduplicationAns,BlockchainError> {
+        let date = format!("{}",SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis());
+        let transient_data = HashMap::from([
+            ("join_request", join_request.to_vec()),
+            ("join_accept", join_accept.to_vec()),
+            ("date", date.as_bytes().to_vec()),
+        ]);
+        
+        let args = BlockchainArgs {
+            Args: vec![
+                "LoRaWANPackets:JoinRequestPreDeduplication".to_owned(),
+            ],
+        };
+        
+        self.create_command::<()>(true,args, Some(&transient_data)).await.map_err(BlockchainError::GenericError)?;
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        
+
+        let d_eui = dev_eui.to_string().as_bytes().to_vec();
+
+        let transient_data = HashMap::from([
+            ("dev_eui", d_eui),
+        ]);
+        
+        let args = BlockchainArgs {
+            Args: vec![
+                "LoRaWANPackets:JoinRequestDeduplication".to_owned(),
+            ],
+        };
+        let res = self.create_command::<HyperledgerJoinDeduplicationAns>(false,args, Some(&transient_data)).await.map_err(BlockchainError::GenericError)?;
+
+        //let d_eui = dev_eui.to_string().as_bytes().to_vec();
+        match res.content {
+            Some(ans) => {
+                Ok(ans)
+                //if ans.winner != nc_id {
+                //    return Ok(false)   
+                //}
+                //MOVED TO SESSIONGENERATION
+                //let transient_data = HashMap::from([
+                //    ("keys", serde_json::to_vec(&ans.keys).unwrap()),
+                //    //("nc_id", nc_id.as_bytes().to_vec()),
+                //    ("dev_eui", d_eui)
+                //]);
+                //
+                //let args = BlockchainArgs {
+                //    Args: vec![
+                //        "LoRaWANPackets:JoinRequestSessionGeneration".to_owned(),
+                //    ],
+                //};
+                //
+                //self.create_command::<()>(true,args, Some(&transient_data)).await.map_err(BlockchainError::GenericError)?;
+            },
+            None => Err(BlockchainError::MissingContent)
+        }
+    }
+
     
     async fn get_packet(&self, hash: &str) -> Result<BlockchainPacket,BlockchainError> {
         let args = BlockchainArgs {
@@ -297,7 +421,6 @@ impl crate::BlockchainClient for BlockchainExeClient {
 
         let ans = self.create_command(false,args, None).await.map_err(BlockchainError::GenericError)?;
         ans.content.ok_or(BlockchainError::MissingContent)
-
     }
 
     async fn get_public_blockchain_state(&self) -> Result<BlockchainState, BlockchainError> {
@@ -327,5 +450,22 @@ impl crate::BlockchainClient for BlockchainExeClient {
 
     async fn get_org_anchor_address(&self, _org: &str) -> Result<(IpAddr, u16), BlockchainError> {
         todo!("look on phdind")
+    }
+    
+    async fn session_generation(&self, keys: &[&str], dev_eui: &str) -> Result<(),BlockchainError> {
+        let transient_data = HashMap::from([
+            ("keys", serde_json::to_vec(&keys).unwrap()),
+            //("nc_id", nc_id.as_bytes().to_vec()),
+            ("dev_eui", dev_eui.as_bytes().to_vec())
+        ]);
+        
+        let args = BlockchainArgs {
+            Args: vec![
+                "LoRaWANPackets:JoinRequestSessionGeneration".to_owned(),
+            ],
+        };
+
+        self.create_command::<()>(true,args, Some(&transient_data)).await.map_err(BlockchainError::GenericError)?;
+        Ok(())
     }
 }

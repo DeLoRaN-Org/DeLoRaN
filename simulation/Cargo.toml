@@ -6,19 +6,19 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.40.0", features = ["full"] }
 lorawan = { path = "../lorawan"}
 blockchain_api = { path = "../blockchain_api"}
-fake_device = { path = "../fake_device"}
+lorawan_device = { path = "../lorawan_device"}
 rand = "0.8.5"
-reqwest = "0.11.14"
-serde = { version = "1.0.156", features = ["derive"] }
-serde_json = "1.0.94"
-paho-mqtt = "0.12.0"
+reqwest = "0.12.7"
+serde = { version = "1.0.210", features = ["derive"] }
+serde_json = "1.0.128"
+paho-mqtt = "0.12.5"
 hex = "0.4.3"
-prost = "0.11"
-prost-types = "0.11"
-thiserror = "1.0.47"
+prost = "0.13.2"
+prost-types = "0.13.2"
+thiserror = "1.0.63"
 
 #[build-dependencies]
 #prost-build = "0.5"

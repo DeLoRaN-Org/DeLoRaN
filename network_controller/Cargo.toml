@@ -1,0 +1,22 @@
+[package]
+name = "network_controller"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+lorawan = { path = "../lorawan"}
+tokio = { version = "1.35.0", features = ["full"] }
+hex = "0.4.3"
+serde = { version = "1.0.193", features = ["derive"] }
+serde_json = "1.0.108"
+clap = { version = "4.4.11", features = ["derive"] }
+blockchain_api = { path = "../blockchain_api"}
+lorawan_device = { path = "../lorawan_device"}
+consensus = { path = "../consensus"}
+rand = "0.8.5"
+lazy_static = "1.4.0"
+openssl = "0.10.61"
+thiserror = "1.0.50"
+nalgebra = "0.33.0"

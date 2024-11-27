@@ -3,12 +3,13 @@ pub mod device;
 use std::{
     fs::File,
     io::{BufReader, Read},
-    net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener},
+    net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener},
 };
 
 use application_server::application_server::{ApplicationServer, ApplicationServerConfig};
 use clap::Parser;
-use fake_device::configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType, RadioDeviceConfig};
+use consensus::{consensus_server::ConsensusConfig, ConsensusCerts};
+use lorawan_device::configs::{ColosseumDeviceConfig, DeviceConfig, DeviceConfigType, RadioDeviceConfig, UDPNCConfig};
 use lazy_static::lazy_static;
 use lorawan::{
     device::{
@@ -16,18 +17,19 @@ use lorawan::{
         Device, DeviceClass, LoRaWANVersion,
     },
     encryption::key::Key,
-    physical_parameters::{DataRate, SpreadingFactor},
+    physical_parameters::{CodeRate, DataRate, LoRaBandwidth, SpreadingFactor},
     regional_parameters::region::Region,
     utils::eui::EUI64,
 };
-use network_controller::network_controller::{NetworkController, NetworkControllerTCPConfig};
+use network_controller::modules::network_controller::NetworkController;
 use serde::{Deserialize, Serialize};
+use blockchain_api::udp_bridge::{BlockchainUDPClient, BlockchainUDPConfig};
 
 use crate::device::device_main;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
-///Preloader for DistributedLoRaWAN Docker
+///Preloader for DeLoRaN
 struct Args {
     /// Path of the configuration JSON file.
     #[clap(short, long, value_parser)]
@@ -39,10 +41,12 @@ struct Args {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NetworkControllerConfig {
-    pub n_id: String,
-    tcp_config: Option<NetworkControllerTCPConfig>,
+    pub nc_id: String,
+    pub orderer_address: String,
+    udp_config: Option<UDPNCConfig>,
     radio_config: Option<RadioDeviceConfig>,
     colosseum_config: Option<ColosseumDeviceConfig>,
+    consensus_config: ConsensusConfig,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -71,18 +75,39 @@ impl Config {
     }
 }
 
-async fn network_controller_main(
-    config: &'static NetworkControllerConfig,
-    sdr_code: &'static str,
-) {
-    let nc = NetworkController::init(
-        config.n_id.as_ref(),
-        config.tcp_config.as_ref(),
-        config.radio_config.as_ref(),
-        config.colosseum_config.as_ref(),
+async fn network_controller_main(config: &'static NetworkControllerConfig) {
+    let nc = NetworkController::new(
+        config.nc_id.as_ref(),
+        config.consensus_config.clone()
     );
-    nc.routine(Some(sdr_code)).await.unwrap();
 
+    lazy_static!(
+        static ref CONFIG: Config = serde_json::from_reader::<BufReader<File>, Config>(BufReader::new(
+            File::open(Args::parse().config.unwrap()).unwrap(),
+        ))
+        .unwrap();
+
+
+        //static ref BC_CONFIG: BlockchainExeConfig = BlockchainExeConfig {
+        //    orderer_addr: CONFIG.network_controller.as_ref().unwrap().orderer_address.clone(),
+        //    channel_name: "lorawan".to_string(),
+        //    chaincode_name: "lorawan".to_string(),
+        //    orderer_ca_file_path: None,
+        //};
+        
+        static ref BC_CONFIG: BlockchainUDPConfig = BlockchainUDPConfig {
+            port: 9999
+        };
+    );
+
+    //let t1 = config.colosseum_config.as_ref().map(|colosseum_config| nc.routine::<ColosseumCommunicator, BlockchainUDPClient>(colosseum_config, &BC_CONFIG));
+    //let t2 = config.radio_config.as_ref().map(|radio_config| nc.routine::<RadioCommunicator, BlockchainUDPClient>(radio_config, &BC_CONFIG));
+    //let t3 = config.tcp_config.as_ref().map(|tcp_config| nc.tcp_routine::<BlockchainUDPClient>(tcp_config, &BC_CONFIG));
+    let t3 = config.udp_config.as_ref().map(|udp_config| nc.udp_routine::<BlockchainUDPClient>(udp_config, &BC_CONFIG));
+
+    //if let Some(t) = t1 { t.await.unwrap(); }
+    //if let Some(t) = t2 { t.await.unwrap(); }
+    if let Some(t) = t3 { t.await.unwrap(); }
 }
 
 async fn application_server_main(config: &'static ApplicationServerConfig) {
@@ -121,73 +146,68 @@ pub fn create_initialized_device() -> Device {
     device
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), std::io::Error> {
     let _config = Config {
         devices: None,
         device: Some(DeviceConfig {
-            dtype: DeviceConfigType::TCP(fake_device::configs::TcpDeviceConfig {
+            dtype: DeviceConfigType::TCP(lorawan_device::configs::TcpDeviceConfig {
                 addr: "127.0.0.1".to_owned(),
                 port: 9090,
             }),
             configuration: create_initialized_device(),
         }),
         network_controller: Some(NetworkControllerConfig {
-            n_id: "ns_test_1".to_string(),
-            tcp_config: Some(NetworkControllerTCPConfig {
-                tcp_dev_port: 9090,
-                tcp_nc_port: 9091,
+            nc_id: "ns_test_1".to_string(),
+            orderer_address: "orderer1.orderers.dlwan.phd".to_string(),
+            udp_config: Some(UDPNCConfig { 
+                addr: "0.0.0.0".to_string(), 
+                port: 9090 
             }),
             radio_config: Some(RadioDeviceConfig {
                 region: Region::EU863_870,
-                spreading_factor: SpreadingFactor::new(7),
-                data_rate: DataRate::new(5),
-                rx_gain: 10,
-                tx_gain: 20,
-                bandwidth: 125_000,
+                spreading_factor: SpreadingFactor::SF7,
+                data_rate: DataRate::DR5,
+                bandwidth: LoRaBandwidth::BW125,
                 sample_rate: 1_000_000.0,
-                rx_freq: 990_000_000.0,
-                tx_freq: 1_010_000_000.0,
+                freq: 990_000_000.0,
                 rx_chan_id: 0,
                 tx_chan_id: 1,
-                dev_id: 0
+                code_rate: CodeRate::CR4_5
             }),
             colosseum_config: Some(ColosseumDeviceConfig {
                 radio_config: RadioDeviceConfig {
                     region: Region::EU863_870,
-                    spreading_factor: SpreadingFactor::new(7),
-                    data_rate: DataRate::new(5),
-                    rx_gain: 10,
-                    tx_gain: 20,
-                    bandwidth: 125_000,
+                    spreading_factor: SpreadingFactor::SF7,
+                    data_rate: DataRate::DR5,
+                    bandwidth: LoRaBandwidth::BW125,
                     sample_rate: 1_000_000.0,
-                    rx_freq: 990_000_000.0,
-                    tx_freq: 1_010_000_000.0,
+                    freq: 990_000_000.0,
                     rx_chan_id: 0,
                     tx_chan_id: 1,
-                    dev_id: 0
+                    code_rate: CodeRate::CR4_5
                 },
                 address: IpAddr::V4(Ipv4Addr::LOCALHOST),
+                sdr_code: String::from("./src/sdr-lora-merged.py"),
+                dev_id: 0
             }),
+            consensus_config: ConsensusConfig {
+                addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 5050)),
+                certs: ConsensusCerts {
+                    cert_path: String::from(""),
+                    key_path: String::from(""),
+                    ca_cert_path: String::from("")
+                }
+            },
         }),
         application_server: Some(ApplicationServerConfig {
             tcp_receive_port: 5050,
         }),
     };
 
-    //println!("{}", serde_json::to_string_pretty(&_config).unwrap());
-    //return Ok(());
 
     lazy_static! {
         static ref ARGS: Args  = Args::parse();
-        static ref SNR_LORA_CODE: String = {
-            let mut buffer = String::new();
-            let _ = File::open(ARGS.pcode.as_ref().unwrap())
-                .unwrap()
-                .read_to_string(&mut buffer)
-                .unwrap();
-            buffer
-        };
         static ref CONFIGS: (
             Option<Vec<DeviceConfig>>,
             Option<DeviceConfig>,
@@ -231,11 +251,11 @@ async fn main() -> Result<(), std::io::Error> {
     }
 
     if let Some(c) = &CONFIGS.0 {
-        device_main(c.iter().collect(), &SNR_LORA_CODE).await;
+        device_main(c.iter().collect()).await;
     } else if let Some(c) = &CONFIGS.1 {
-        device_main(vec![c], &SNR_LORA_CODE).await;
+        device_main(vec![c]).await;
     } else if let Some(c) = &CONFIGS.2 {
-        network_controller_main(c, &SNR_LORA_CODE).await;
+        network_controller_main(c).await;
     } else if let Some(c) = &CONFIGS.3 {
         application_server_main(c).await;
     } else {

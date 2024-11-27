@@ -6,10 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = "0.11.14"
+reqwest = "0.12.7"
 lorawan = {path="../lorawan"}
-serde_json = "1.0.93"
-tokio = { version = "1", features = ["full"] }
-serde = {version = "1.0.152", features= ["derive"]}
-async-trait = "0.1.72"
-thiserror = "1.0.47"
+serde_json = "1.0.128"
+tokio = { version = "1.40.0", features = ["full"] }
+serde = {version = "1.0.210", features= ["derive"]}
+async-trait = "0.1.82"
+thiserror = "1.0.63"
+rand = "0.8.5"

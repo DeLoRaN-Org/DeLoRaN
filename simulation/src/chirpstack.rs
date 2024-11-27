@@ -1,23 +1,19 @@
-#![allow(non_snake_case)]
+//#![allow(non_snake_case, unused)]
 
-use core::panic;
-use std::{collections::{HashMap, HashSet}, time::{Duration, Instant, SystemTime}, fs::File, path::Path, process::Command as SyncCommand};
+use std::{collections::HashMap, time::{Duration, Instant, SystemTime}, fs::File, path::Path, process::Command as SyncCommand};
 
-use fake_device::{tcp_device::TcpDevice, lorawan_device::LoRaWANDevice, communicators::LoRaWANCommunication};
-use hex::FromHex;
+use lorawan_device::{communicator::LoRaWANCommunicator, configs::{TcpDeviceConfig, UDPDeviceConfig}, devices::{lorawan_device::LoRaWANDevice, mock_device::MockDevice, udp_device::UDPDevice}};
 use lorawan::{
-    device::{Device, DeviceClass, LoRaWANVersion},
-    encryption::key::Key,
-    regional_parameters::region::Region,
-    utils::{eui::EUI64, PrettyHexSlice}, lorawan_packet::{LoRaWANPacket, mhdr::MType, join::JoinAcceptPayload, payload::Payload},
+    device::{Device, DeviceClass, LoRaWANVersion}, encryption::key::Key, lorawan_packet::{mhdr::MType, payload::Payload, LoRaWANPacket}, utils::{eui::EUI64, PrettyHexSlice}
 };
 use paho_mqtt::Client;
 use prost::Message;
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
-use tokio::{net::TcpStream, sync::mpsc, process::Command};
+use tokio::{sync::mpsc, process::Command};
 use std::io::Write;
 
-use crate::{compiled::gw::{UplinkFrame, UplinkTxInfo, Modulation, modulation::Parameters, LoraModulationInfo, UplinkRxInfo, DownlinkFrame}, RANDOM_JOIN_DELAY, RANDOM_PACKET_DELAY, FIXED_PACKET_DELAY, NUM_PACKETS, NUM_DEVICES};
+use crate::{compiled::gw::{modulation::Parameters, DownlinkFrame, LoraModulationInfo, Modulation, UplinkFrame, UplinkRxInfo, UplinkTxInfo}, FIXED_JOIN_DELAY, FIXED_PACKET_DELAY, NUM_DEVICES, NUM_PACKETS, RANDOM_JOIN_DELAY, RANDOM_PACKET_DELAY, STARTING_DEV_NONCE};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct DeviceStatus {
@@ -106,9 +102,10 @@ async fn stats_holder(mut receiver: mpsc::Receiver<Msg>) {
 }
 
 async fn network_live_stats_loop(sender: mpsc::Sender<Msg>) {
-    let output = Command::new("sh")
+    let output = Command::new("ssh")
         .args([
-            "-c",
+            "rastafan@169.254.189.196",
+            //"-c",
             r#"docker stats --no-stream | grep "chirpstack" | awk {'print $2'}"#,
         ])
         .output().await
@@ -125,15 +122,18 @@ async fn network_live_stats_loop(sender: mpsc::Sender<Msg>) {
     let mut last_input = vec![0_usize; num_entities];
     let mut last_output = vec![0_usize; num_entities];
 
-    let usage_lock_path = Path::new("./output/simulation.lock");
+    //let usage_lock_path = Path::new("./output/simulation.lock");
 
     let start = Instant::now();
     loop {
         //let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis();
 
         let cmd = r#"docker stats --no-stream | grep "chirpstack" | awk '{print $2 "," $3 "," $4}'"#;
-        let output = Command::new("sh")
-                    .args(["-c", cmd])
+        let output = Command::new("ssh")
+                    .args([
+                        "rastafan@169.254.189.196", 
+                        cmd
+                    ])
                     .output().await
                     .unwrap();
         let lines = String::from_utf8_lossy(&output.stdout);
@@ -146,8 +146,11 @@ async fn network_live_stats_loop(sender: mpsc::Sender<Msg>) {
             let ram = ncr_vec[2];
             
             let command = format!("docker exec {name} sh -c 'cat /proc/net/dev' | grep eth0 | awk {{'print $2 \",\" $10'}}");
-            let output = SyncCommand::new("sh")
-                    .args(["-c", command.as_str()])
+            let output = SyncCommand::new("ssh")
+                    .args([
+                        "rastafan@169.254.189.196", 
+                        command.as_str()
+                    ])
                     .output()
                     .unwrap();
             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -191,7 +194,7 @@ fn create_uplink(payload: &[u8]) -> UplinkFrame {
             }),
         }),
         rx_info: Some(UplinkRxInfo {
-            gateway_id: "06b302c2f002cfa3".to_owned(),
+            gateway_id: "00f58d99c1c10a74".to_owned(),
             uplink_id: rand::random(),
             time: None,
             time_since_gps_epoch: None,
@@ -208,34 +211,39 @@ fn create_uplink(payload: &[u8]) -> UplinkFrame {
             location: None,
         }),
     }
-
 }
 
-async fn device_routine<T: LoRaWANCommunication + Send + Sync>(mut fd: LoRaWANDevice<T>, i: usize, sender: mpsc::Sender<Msg>, start: Instant) {
+async fn device_routine<T: LoRaWANCommunicator + Send + Sync>(mut fd: LoRaWANDevice<T>, i: usize, sender: mpsc::Sender<Msg>, start: Instant) {
     //println!("{fd:?}");
-    let client = Client::new("tcp://127.0.0.1:1883").unwrap();
-    let down_topic = "eu868/gateway/06b302c2f002cfa3/command/down";
-    let up_topic = "eu868/gateway/06b302c2f002cfa3/event/up";
+    let client = Client::new("tcp://169.254.189.196:1883").unwrap();
+    let down_topic = "eu868/gateway/00f58d99c1c10a74/command/down";
+    let up_topic = "eu868/gateway/00f58d99c1c10a74/event/up";
 
     client.connect(None).unwrap();
-    client.subscribe(down_topic, paho_mqtt::QOS_1).unwrap();
+    client.subscribe(down_topic, paho_mqtt::QOS_2).unwrap();
     let receiver = client.start_consuming();
 
-    fd.set_dev_nonce(39);
+    fd.set_dev_nonce(STARTING_DEV_NONCE);
 
-    let mut sleep_time: u64 = rand::random::<u64>() % RANDOM_JOIN_DELAY;
+    let mut rng = rand::rngs::StdRng::from_entropy();
+    tokio::time::sleep(Duration::from_secs(rng.gen_range(0..600))).await;
+    
+    let mut sleep_time = rng.gen_range(0_u64..RANDOM_JOIN_DELAY);
+    println!("Sleeping for {sleep_time:?}");
     tokio::time::sleep(Duration::from_secs(sleep_time)).await;
+
+    fd.set_dev_nonce(16);
 
     let jr = fd.create_join_request().unwrap();
     let content = create_uplink(&jr);
 
     let v = content.encode_to_vec();
-    //println!("{i}: {}", PrettyHexSlice(&v));
+    println!("{i} Sending join: {}", PrettyHexSlice(&jr));
 
     let mut before = Instant::now();
 
     client
-        .publish(paho_mqtt::Message::new(up_topic, &*v, paho_mqtt::QOS_1))
+        .publish(paho_mqtt::Message::new(up_topic, &*v, paho_mqtt::QOS_2))
         .unwrap();
 
     let mut counter_uplink = 0_usize;
@@ -248,7 +256,7 @@ async fn device_routine<T: LoRaWANCommunication + Send + Sync>(mut fd: LoRaWANDe
         if dwn.items.is_empty() {
             println!("{i}: {dwn:?}")
         } else {
-            let downlink = &dwn.items[0];    
+            let downlink = &dwn.items[0];
             let payload = &downlink.phy_payload;
             
             //println!("{downlink:?}");
@@ -259,94 +267,62 @@ async fn device_routine<T: LoRaWANCommunication + Send + Sync>(mut fd: LoRaWANDe
             //    msgs.insert(PrettyHexSlice(payload).to_string());
             //}
             
-            let mtype = LoRaWANPacket::extract_mtype(payload[0]);
+            let mtype = MType::from(payload[0]);
             match mtype {
                 MType::JoinAccept => {
-                    //println!("{i}: Received join_accept: {}", PrettyHexSlice(payload));
-                    match LoRaWANPacket::from_bytes(payload, Some(&*fd), false) {
+                    match LoRaWANPacket::from_bytes(payload, Some(&fd), false) {
                         Err(err) => {
                             //eprintln!("{i}: {err:?}");
                             continue;
                         },
                         Ok(decrypted) => {
+                            println!("{i}: Received join_accept: {}", PrettyHexSlice(payload));
                             sender.send(Msg { thread_id: i, stats: Stats::Rtt, content: format!("{}, {}",before.elapsed().as_millis(), start.elapsed().as_millis()) }).await.unwrap();
 
                             let decryped = LoRaWANPacket::from_bytes(payload, Some(&*fd), false).unwrap().into_payload();
                             if let Payload::JoinAccept(ja) = decryped {
-                                fd.derive_session_context(&ja).unwrap();
+                                fd.generate_session_context(&ja).unwrap();
         
                                 let payload: Vec<u8> = format!("### confirmed {i} message  ###").into();
                                 let uplink = fd.create_uplink(Some(&payload), true, Some(1), None).unwrap(); 
                                 let uplink = create_uplink(&uplink).encode_to_vec();
-        
-                                sleep_time = rand::random::<u64>() % RANDOM_PACKET_DELAY;
-                                tokio::time::sleep(Duration::from_secs(FIXED_PACKET_DELAY + sleep_time)).await;
-        
+                                
+                                sleep_time = rng.gen_range(FIXED_JOIN_DELAY..RANDOM_JOIN_DELAY);
+                                tokio::time::sleep(Duration::from_secs(sleep_time)).await;
+
                                 before = Instant::now();
                                 client.publish(paho_mqtt::Message::new(up_topic, &*uplink, paho_mqtt::QOS_1)).unwrap();
                                 counter_uplink += 1;
                                 //println!("published uplink: {}", PrettyHexSlice(&uplink));
-                            } else {
-                                panic!()
                             }
                         },
                     }
                 },
-                MType::UnconfirmedDataDown => {
-                    //println!("{i}: Received unconfirmed data down: {}", PrettyHexSlice(payload));
+                MType::UnconfirmedDataDown | MType::ConfirmedDataDown => {
                     match LoRaWANPacket::from_bytes(payload, Some(&*fd), false) {
                         Err(err) => {
                             //eprintln!("{i}: {err:?}");
                             continue;
                         },
                         Ok(decrypted) => {
+                            println!("{i}: Received (un?)confirmed data down: {}", PrettyHexSlice(payload));
                             sender.send(Msg { thread_id: i, stats: Stats::Rtt, content: format!("{}, {}",before.elapsed().as_millis(), start.elapsed().as_millis()) }).await.unwrap();
                             if let Payload::MACPayload(dd) = decrypted.into_payload() {
                                 let payload: Vec<u8> = format!("ProvaProvaProva {i}").into();
                                 let uplink_vec = fd.create_uplink(Some(&payload), true, Some(1), None).unwrap();
                                 let uplink = create_uplink(&uplink_vec).encode_to_vec();
         
-                                sleep_time = rand::random::<u64>() % RANDOM_PACKET_DELAY;
-                                tokio::time::sleep(Duration::from_secs(FIXED_PACKET_DELAY + sleep_time)).await;
+                                sleep_time = rng.gen_range(FIXED_JOIN_DELAY..RANDOM_JOIN_DELAY);
+                                tokio::time::sleep(Duration::from_secs(sleep_time)).await;
                                 
                                 before = Instant::now();
                                 client.publish(paho_mqtt::Message::new(up_topic, &*uplink, paho_mqtt::QOS_1)).unwrap();
                                 counter_uplink += 1;
                                 //println!("published uplink: {}", PrettyHexSlice(&uplink_vec));
-                            } else {
-                                panic!()
                             }
                         },
                     }
-                },
-                MType::ConfirmedDataDown => {
-                    //println!("{i}: Received confirmed data down: {}", PrettyHexSlice(payload));
-                    match LoRaWANPacket::from_bytes(payload, Some(&*fd), false) {
-                        Err(err) => {
-                            //eprintln!("{i}: {err:?}");
-                            continue;
-                        },
-                        Ok(decrypted) => {
-                            sender.send(Msg { thread_id: i, stats: Stats::Rtt, content: format!("{}, {}",before.elapsed().as_millis(), start.elapsed().as_millis()) }).await.unwrap();
-                            if let Payload::MACPayload(dd) = decrypted.into_payload() {
-                                let payload: Vec<u8> = format!("ProvaProvaProva {i}").into();
-                                let uplink = fd.create_uplink(Some(&payload), true, Some(1), None).unwrap();
-                                let uplink = create_uplink(&uplink).encode_to_vec();
-        
-                                sleep_time = rand::random::<u64>() % RANDOM_PACKET_DELAY;
-                                tokio::time::sleep(Duration::from_secs(FIXED_PACKET_DELAY + sleep_time)).await;
-                                
-                                before = Instant::now();
-                                client.publish(paho_mqtt::Message::new(up_topic, &*uplink, paho_mqtt::QOS_1)).unwrap();
-                                counter_uplink += 1;
-                                //println!("published uplink: {}", PrettyHexSlice(&uplink));
-                            }  else {
-                                panic!()
-                            }
-                        },
-                    }
-                },
-                
+                },                
                 MType::UnconfirmedDataUp |
                 MType::ConfirmedDataUp |
                 MType::RejoinRequest |
@@ -382,14 +358,15 @@ pub async fn main_chirpstack() {
         network_live_stats_loop(s1).await
     });
 
-    let ans = client.get("http://127.0.0.1:8090/api/devices")
+    let ans = client.get("http://169.254.189.196:8090/api/devices")
         .query(&[
             //("applicationId","17272d19-e169-49a4-82e7-fa8ae17439ad"),
-            ("applicationId","b8d129fe-1d37-4944-beed-ad500e00aa95"),
-            ("limit","400"),
+            //("applicationId","b8d129fe-1d37-4944-beed-ad500e00aa95"),
+            ("applicationId","52933d29-1994-482a-aa85-535413048162"),
+            ("limit", &format!("{}", NUM_DEVICES)),
         ])
         .header("Accept", "application/json")
-        .header("Grpc-Metadata-Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJjaGlycHN0YWNrIiwiaXNzIjoiY2hpcnBzdGFjayIsInN1YiI6ImFlYzhmNzE5LWI0Y2MtNDNhYi05ZWEyLWQ0YWZmYWY3MzNlYSIsInR5cCI6ImtleSJ9.Rx5-zIhjZSeUPCEqFfZkjll7acfjc-4cyFOLPnrNPS8")
+        .header("Grpc-Metadata-Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJjaGlycHN0YWNrIiwiaXNzIjoiY2hpcnBzdGFjayIsInN1YiI6IjFlMDEzZDRhLTZlYjItNDk4OS1hY2I4LWExYjJmNTFjNjcwZCIsInR5cCI6ImtleSJ9.Rrz1TeB7xtcxS3CVfD996X5h0WPljk75pDouqRz0_sI")
         //.header("Grpc-Metadata-Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJjaGlycHN0YWNrIiwiaXNzIjoiY2hpcnBzdGFjayIsInN1YiI6IjE0NzA3ZWQ2LTU4YzYtNDdkMS04OWQ0LTgzNjRiMjkzMDllYSIsInR5cCI6ImtleSJ9.B7m6iadZRCfr5mH7v5V1ig79GVr8X8Aw7RpboovZ7ow")
         //.header("applicationId", "52f14cd4-c6f1-4fbd-8f87-4025e1d49242")
         //.header("tenantId", "917c0850-0ae2-4a1b-b716-f6df37bb732b")
@@ -399,15 +376,17 @@ pub async fn main_chirpstack() {
     println!("{}", ans);
     let content: ChirpstackListDeviceAns = serde_json::from_str(ans).unwrap();
     
-    let mut fake_devices : Vec<LoRaWANDevice<_>> = Vec::new();
+    let mut lorawan_devices : Vec<LoRaWANDevice<_>> = Vec::new();
 
     for (i, d )in content.result.iter().enumerate() {
-        let ans = client.get(format!("http://127.0.0.1:8090/api/devices/{}/keys", d.devEui))
+        let ans = client.get(format!("http://169.254.189.196:8090/api/devices/{}/keys", d.devEui))
         .header("Accept", "application/json")
-        .header("Grpc-Metadata-Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJjaGlycHN0YWNrIiwiaXNzIjoiY2hpcnBzdGFjayIsInN1YiI6ImFlYzhmNzE5LWI0Y2MtNDNhYi05ZWEyLWQ0YWZmYWY3MzNlYSIsInR5cCI6ImtleSJ9.Rx5-zIhjZSeUPCEqFfZkjll7acfjc-4cyFOLPnrNPS8")
+        //.header("Grpc-Metadata-Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJjaGlycHN0YWNrIiwiaXNzIjoiY2hpcnBzdGFjayIsInN1YiI6ImFlYzhmNzE5LWI0Y2MtNDNhYi05ZWEyLWQ0YWZmYWY3MzNlYSIsInR5cCI6ImtleSJ9.Rx5-zIhjZSeUPCEqFfZkjll7acfjc-4cyFOLPnrNPS8")
+        .header("Grpc-Metadata-Authorization", "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJjaGlycHN0YWNrIiwiaXNzIjoiY2hpcnBzdGFjayIsInN1YiI6IjFlMDEzZDRhLTZlYjItNDk4OS1hY2I4LWExYjJmNTFjNjcwZCIsInR5cCI6ImtleSJ9.Rrz1TeB7xtcxS3CVfD996X5h0WPljk75pDouqRz0_sI")
         .send().await.unwrap();
 
         let text = ans.text().await.unwrap();
+        println!("{text}");
         let device: ChirpstackDevice = serde_json::from_str(&text).unwrap();
         //println!("{device:#?}");
 
@@ -420,14 +399,14 @@ pub async fn main_chirpstack() {
             Key::from_hex(&device.deviceKeys.appKey).unwrap(),
             LoRaWANVersion::V1_0_3,
         );
-        let fd = TcpDevice::create(device, "localhost".to_owned(), 9999).await;
-        fake_devices.push(fd);
-        println!("Got {i} device");
+        let fd = MockDevice::create(device).await;
+        lorawan_devices.push(fd);
+        println!("Got {} device", i + 1);
     }
 
     let mut handles = Vec::new();
     
-    for (i, mut fd) in fake_devices.into_iter().enumerate().take(NUM_DEVICES) {
+    for (i, mut fd) in lorawan_devices.into_iter().enumerate().take(NUM_DEVICES) {
         let cloned_sender = sender.clone();
         handles.push(tokio::spawn(async move { device_routine(fd,i,cloned_sender, start).await }));
     }

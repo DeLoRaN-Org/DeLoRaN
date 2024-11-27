@@ -1,8 +1,10 @@
 use std::fmt::Debug;
 
+use serde::{Deserialize, Serialize};
+
 use crate::utils::traits::ToBytes;
 
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default, Debug, Serialize, Deserialize)]
 pub struct DownlinkFCtrl {
     //1 byte :: 1 bit for ADR, 1 bit for RFU, 1 bit ACK, 1 bit FPending, 4 bits for FOptsLen
     pub adr: bool,
@@ -25,7 +27,7 @@ impl DownlinkFCtrl {
     }
 }
 
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Copy, Clone, Default, Debug, Serialize, Deserialize)]
 pub struct UplinkFCtrl {
     //1 byte :: 1 bit for ADR, 1 bit for RFU, 1 bit ACK, 1 bit ClassB, 4 bits for FOptsLen
     pub adr: bool,
@@ -47,7 +49,7 @@ impl UplinkFCtrl {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum FCtrl {
     Uplink(UplinkFCtrl),
     Downlink(DownlinkFCtrl)

@@ -10,8 +10,13 @@ import sys
 import threading
 import os
 import queue
+import datetime
+import random
+from collections import deque
 
 from time import sleep
+
+############### START LORA_TRANSCEIVER.PY #########################
 
 class bcolors:
     HEADER = '\033[95m'
@@ -26,7 +31,7 @@ class bcolors:
 
 
 
-
+PRINT_DEBUG = False
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -43,13 +48,12 @@ def threshold_trigger_process(index_queue,SF_sample_th, queue_arr_tuple):
                 queue_arr[index].put_nowait(1)
                 samples_counter[index] = 0
 
-
 def decoder_process(shm_name,complex_data_number, buf_size,sf_index_queue,pkt_queue, sf, BW, fs, SF_sample_th):
     # temp_samples = np.zeros(complex_data_number,dtype=np.complex64)
 
 
 
-    print("Decoder on SF", str(sf), ", PID:", str(os.getgid()))
+    print("Decoder on SF", str(sf), ", PID:", str(os.getgid())) if PRINT_DEBUG else None
     sf_minimum_win_size_arr = np.array((650e3, 1.2e6, 2e6, 3.6e6, 8e6, 14.5e6), dtype= np.uint32)
     sf_minimum_win_size = int(1.1 * sf_minimum_win_size_arr[sf-7])
 
@@ -69,7 +73,7 @@ def decoder_process(shm_name,complex_data_number, buf_size,sf_index_queue,pkt_qu
 
         count_debug = count_debug + 1
         if(count_debug == 50):
-            print(bcolors.OKGREEN + "process on SF",sf, "is alive!!!" + bcolors.ENDC)
+            print(bcolors.OKGREEN + "process on SF",sf, "is alive!!!" + bcolors.ENDC) 
             count_debug = 0
         #sys.stdout.flush()
         # start_t = time.time()
@@ -104,8 +108,6 @@ def thread_decode(samples, sf, BW, fs, pkt_queue):
 
         # for pkt in ans:
         #     print(pkt)
-
-
 
 def tx_burst(sample_rate, center_freq, pkt_list, sleep_time, sending, streamer, amplitude, verbose):
 
@@ -146,7 +148,6 @@ def tx_burst(sample_rate, center_freq, pkt_list, sleep_time, sending, streamer, 
         time.sleep(sleep_time)
 
     sending.value = False
-
 
 def tx_burst_multi_sf(sample_rate, center_freq, pkt_list, sleep_time, sending, streamer, sf_list, amplitude):
 
@@ -222,11 +223,6 @@ def tx_burst_multi_sf(sample_rate, center_freq, pkt_list, sleep_time, sending, s
 
     sending.value = False
 
-
-
-
-
-
 def tx(sample_rate, center_freq, pkt_queue, sleep_time, sending, streamer, amplitude, verbose = False):
 
     #usrp = uhd.usrp.MultiUSRP("address=" + address)
@@ -236,8 +232,8 @@ def tx(sample_rate, center_freq, pkt_queue, sleep_time, sending, streamer, ampli
     while sending.value:
 
         pkt = pkt_queue.get()
-        if(verbose):
-            print("Sending pkt", pkt)
+        
+        print("Sending pkt", pkt) if PRINT_DEBUG else None 
 
         buffer_samps = streamer.get_max_num_samps()
 
@@ -256,9 +252,9 @@ def tx(sample_rate, center_freq, pkt_queue, sleep_time, sending, streamer, ampli
                 n_samples = streamer.send(samples, metadata)
             send_samps += n_samples
 
-            if(verbose):
-                print("Sent samples", n_samples)
-                print("Total Sent Samples", send_samps)
+
+            print("Sent samples", n_samples) if PRINT_DEBUG else None
+            print("Total Sent Samples", send_samps) if PRINT_DEBUG else None
 
         metadata.end_of_burst = True
         streamer.send(np.zeros((1, 1), dtype=np.complex64), metadata)
@@ -271,28 +267,9 @@ def tx(sample_rate, center_freq, pkt_queue, sleep_time, sending, streamer, ampli
 
     sending.value = False
 
-
-
-
-
-
-
-
-
-
-
-
-
 def rx(sample_rate, sf_list, bandwidth, receiving, packet_queue, complex_data_number, streamer, pause_rec,buf_size = 120):
 
-
-
-
-
-
     #LORA RECEIVER MAIN THREAD#
-
-
     #THE RECEIVER SCRIPT IS STRUCTURED AS A TWO-PROCESS PROGRAM: ONE PROCESS (THE MAIN THREAD OR RECEIVER THREAD) IS RESPONSIBLE FOR READING AND
     #BUFFERING OF RF DATA FROM THE USRP RADIO; THE OTHER PROCESS (THE DECODER THREAD) READS AND PROCESSES DATA FROM THE BUFFER
     #THE PROGRAM RESORTS TO A CIRCULAR BUFFER, AND MAKES USE OF A QUEUE TO EXCHANGDE DATA BETWEEN THE PROCESSES
@@ -308,15 +285,10 @@ def rx(sample_rate, sf_list, bandwidth, receiving, packet_queue, complex_data_nu
     data_size = 8  # bytes
 
     #NUMBER OF COMPLEX SAMPLES IN A DATA CHUNK
-    #complex_data_number = 500000
-
-
+    complex_data_number = 300000
 
     #SLIDING WINDOW CURSOR FOR THE RECEIVER BUFFER
     cursor = 0
-
-
-
 
     #SIZE, IN BYTES, OF A DATA CHUNK
     block_size = complex_data_number * data_size
@@ -337,13 +309,8 @@ def rx(sample_rate, sf_list, bandwidth, receiving, packet_queue, complex_data_nu
     SF_sample_th = SF_sample_th[indexes]
     sf_arr = sf_arr[indexes]
 
-
     queue_arr = np.empty(shape=(sf_arr.size,), dtype=mp_queues.Queue)
     processes_arr = np.empty(shape=(sf_arr.size,), dtype=mp.Process)
-
-
-
-
 
     #CREATION OF THE SHARED MEMORY AREA
     shm = shared_memory.SharedMemory(create = True, size = block_size * BUF_SIZE)
@@ -362,33 +329,25 @@ def rx(sample_rate, sf_list, bandwidth, receiving, packet_queue, complex_data_nu
         processes_arr[index] = mp.Process(name="Decoder SF" + str(sf), target=decoder_process, args=(shm.name, complex_data_number, BUF_SIZE,
                                                                         queue_arr[index], packet_queue[index], sf, bandwidth,
                                                                         sample_rate, SF_sample_th[index]))
-
-
         processes_arr[index].start()
-        while (not (processes_arr[index].is_alive())):
-            time.sleep(0.1)
+        time.sleep(0.1)
+        #while (not (processes_arr[index].is_alive())):
 
-    for index, sf in enumerate(sf_arr):
-        while (not (processes_arr[index].is_alive())):
-            processes_arr[index] = mp.Process(name="Decoder SF" + str(sf), target=decoder_process,
-                                              args=(shm.name, complex_data_number, BUF_SIZE,
-                                                    queue_arr[index], packet_queue[index], sf, bandwidth,
-                                                    sample_rate, SF_sample_th[index]))
-
-            processes_arr[index].start()
-            time.sleep(1)
-
+    #for index, sf in enumerate(sf_arr):
+    #    while (not (processes_arr[index].is_alive())):
+    #        processes_arr[index] = mp.Process(name="Decoder SF" + str(sf), target=decoder_process,
+    #                                          args=(shm.name, complex_data_number, BUF_SIZE,
+    #                                                queue_arr[index], packet_queue[index], sf, bandwidth,
+    #                                                sample_rate, SF_sample_th[index]))
+    #        processes_arr[index].start()
+    #        time.sleep(1)
 
     #CREATION OF THE THRESHOLD TRIGGER PROCESS
-
-
     trigger_process = mp.Process(target=threshold_trigger_process, args=(index_queue, SF_sample_th, tuple(queue_arr)))
     trigger_process.daemon = True
     trigger_process.start()
 
-
     debug = True
-
 
     # # Start Stream
     stream_cmd = uhd.types.StreamCMD(uhd.types.StreamMode.start_cont)
@@ -408,11 +367,20 @@ def rx(sample_rate, sf_list, bandwidth, receiving, packet_queue, complex_data_nu
         try:
 
             pause_rec.wait()
+
+
+
+            before = datetime.datetime.now()
+            #print("before")
             streamer.recv(recv_buffer, metadata)
+            #print("after")
+            after = datetime.datetime.now()
+
+            #print("Time elapsed", after - before) #if PRINT_DEBUG else None
+            #print(bcolors.OKGREEN + "DEBUG metadata ", metadata, bcolors.ENDC) #if PRINT_DEBUG else None
+            
             #streamer.recv(recv_buffer, metadata, timeout = 10)
             #streamer.recv(samples_buffer[cursor:cursor + complex_data_number], metadata)
-            if(debug):
-                print(bcolors.OKGREEN + "DEBUG metadata ", metadata, bcolors.ENDC)
 
             samples_buffer[cursor:cursor + buf_length] = recv_buffer
             cursor = (cursor + buf_length) % buffer_size
@@ -428,10 +396,6 @@ def rx(sample_rate, sf_list, bandwidth, receiving, packet_queue, complex_data_nu
                 # stream_cmd.stream_now = True
                 # streamer.issue_stream_cmd(stream_cmd)
                 pass
-
-
-
-
         except KeyboardInterrupt:
             print("Stopping RX")
             rec = False
@@ -460,20 +424,6 @@ def rx(sample_rate, sf_list, bandwidth, receiving, packet_queue, complex_data_nu
         shm.close()
         shm.unlink()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 class lora_transceiver():
 
     def __init__(self,address,rx_gain,tx_gain,bandwidth, rx_freq, tx_freq, sample_rate, rx_channel_ID, tx_channel_ID, signal_amplitude = 1):
@@ -498,6 +448,7 @@ class lora_transceiver():
         st_args = uhd.usrp.StreamArgs("fc32", "sc16")
         st_args.channels = [self.rx_channel]
         self.rx_streamer = self.usrp.get_rx_stream(st_args)
+        
         self.rx_pause_flag = mp.Event()
         self.rx_pause_flag.set()
         #
@@ -584,6 +535,10 @@ class lora_transceiver():
         # print("Main class", self.rx_streamer)
 
 
+############### END LORA_TRANSCEIVER.PY #########################
+
+############### START LORA_UTILS.PY #########################
+
 NACK_CODE = 255
 POLLING_CODE = 254
 POLLING_CODE_BROADCAST = 252
@@ -604,7 +559,7 @@ def gen_pack_polling(SF, BW, srcID, dstID, CR = 1, brdcst = False):
     else:
         payload[0] = POLLING_CODE
     return LoRaPacket(payload, srcID, dstID, seqn= 0, hdr_ok=1, has_crc=1, crc_ok=1,
-                    cr=CR, ih=0, SF=SF, BW=BW)
+                    cr=CR, ih=0, SF=SF, BW=BW, rssi=0, snr=0) #FIXME: rssi and snr are not 0
 
 def pack_lora_data(data, SF, BW, packet_size, srcID, dstID, extended_sqn=True, CR = 1):
     if (extended_sqn):
@@ -630,11 +585,10 @@ def pack_lora_data(data, SF, BW, packet_size, srcID, dstID, extended_sqn=True, C
             payload = data_bytes[start:start + act_pkt_size]
 
         pack_array[index] = LoRaPacket(payload, srcID, dstID, seqn=(index) % 256, hdr_ok=1, has_crc=1, crc_ok=1,
-                                            cr=CR, ih=0, SF=SF, BW=BW)
+                                            cr=CR, ih=0, SF=SF, BW=BW, rssi=0, snr=0) #FIXME come sopra
         start = start + act_pkt_size
 
     return pack_array
-
 
 def pack_lora_nack(data, SF, BW, packet_size, srcID, dstID, CR = 1):
 
@@ -662,21 +616,18 @@ def pack_lora_nack(data, SF, BW, packet_size, srcID, dstID, CR = 1):
 
 
         pack_array[index] = LoRaPacket(payload, srcID, dstID, seqn=(index) % 256, hdr_ok=1, has_crc=1, crc_ok=1,
-                                            cr=CR, ih=0, SF=SF, BW=BW)
+                                            cr=CR, ih=0, SF=SF, BW=BW, rssi=0, snr=0) #FIXME come sopra
         start = start + act_pkt_size
 
 
 
     return pack_array
 
-
 def pack16bit(high_byte,low_byte):
     high_byte = np.uint8(high_byte)
     low_byte = np.uint8(low_byte)
     temp_arr = np.array(([low_byte, high_byte])).view(dtype = np.uint16)
     return temp_arr[0]
-
-
 
 def unpack_lora_data(pkt_array, arr_type = np.uint8, extended_sqn = True):
     array_size = 0
@@ -718,7 +669,8 @@ def unpack_lora_ack(acks_array):
         if(pld_size < MAX_PACKET_SIZE):
             missing_seqn =  missing_seqn[:index+pld_size - 1]
         index = index + pld_size - 1
-    print(missing_seqn)
+
+    print(missing_seqn) if PRINT_DEBUG else None
     #missing_seqn = missing_seqn[:index]
     try:
         missing_seqn = missing_seqn.view(dtype = np.uint16)
@@ -729,6 +681,11 @@ def unpack_lora_ack(acks_array):
 
     return missing_seqn
 
+############### END LORA_UTILS.PY #########################
+
+
+############### START LORA.PY #########################
+
 #############CONSTANTS#####################
 # rising and falling edges duration
 Trise = 50e-6  
@@ -738,17 +695,12 @@ Cfo_PPM = 17
 NF_dB = 6
 #Minimum duration for a LoRa packet
 min_time_lora_packet = 20e-3 #20 milliseconds
-
-
 ##########################################################
 
-
-
-
-
 def lora_packet(BW, OSF, SF, k1, k2, n_pr, IH, CR, MAC_CRC, SRC, DST, SEQNO, MESSAGE, Trise, t0_frac, phi0):
-    # in our implementation, the payload includes a 4 byte pseudo-header: (SRC, DST, SEQNO, LENGTH)
-    LENGTH = np.uint16(4 + (MESSAGE.size))
+    # in our implementation, the payload includes a 6 byte pseudo-header: (SRC, DST, SEQNO, LENGTH)
+    pseudo_header_length = 6
+    LENGTH = np.uint16(pseudo_header_length + MESSAGE.size)
 
     # n_sym_hdr: number of chirps encoding the header (0 if IH: True)
     # n_bits_hdr: [bit DI PAYLOAD presenti nell'header CHIEDERE A STEFANO]
@@ -801,8 +753,6 @@ def lora_packet(BW, OSF, SF, k1, k2, n_pr, IH, CR, MAC_CRC, SRC, DST, SEQNO, MES
 
     return s, k_hdr, k_payload
 
-
-
 def lora_header_init(SF, IH):
     if (IH):
         n_sym_hdr = np.uint16(0)
@@ -816,7 +766,6 @@ def lora_header_init(SF, IH):
         n_bits_hdr = np.uint16(intlv_hdr_size * 4 / (4 + CR_hdr) - 20)
 
     return n_sym_hdr, n_bits_hdr
-
 
 # function [k_hdr,payload_ofs] =
 def lora_header(SF, LENGTH, CR, MAC_CRC, PAYLOAD, payload_ofs):
@@ -878,8 +827,6 @@ def lora_header(SF, LENGTH, CR, MAC_CRC, PAYLOAD, payload_ofs):
 
     return k_hdr, payload_ofs
 
-
-
 def lora_payload_init(SF, LENGTH, MAC_CRC, CR, n_bits_hdr, DST, SRC, SEQNO, MESSAGE):
     # bigger spreading factors (11 and 12) use 2 less bits per symbol
     if SF > 10:
@@ -894,13 +841,18 @@ def lora_payload_init(SF, LENGTH, MAC_CRC, CR, n_bits_hdr, DST, SRC, SEQNO, MESS
     n_sym_payload = n_blk_tot * n_sym_blk
 
     byte_range = np.arange(7, -1, -1, dtype=np.uint8)
+    byte_range_u16 = np.arange(15, -1, -1, dtype=np.uint8)
+
     PAYLOAD = np.zeros(int(n_bits_hdr + n_blk_tot * n_bits_blk), dtype=np.uint8)
-    PAYLOAD[byte_range] = num2binary(DST, 8)
-    PAYLOAD[8 + byte_range] = num2binary(SRC, 8)
-    PAYLOAD[8 * 2 + byte_range] = num2binary(SEQNO, 8)
-    PAYLOAD[8 * 3 + byte_range] = num2binary(LENGTH, 8)
+
+
+    custom_header_length = 48
+    PAYLOAD[byte_range_u16] = num2binary(DST, 16)
+    PAYLOAD[16 + byte_range_u16] = num2binary(SRC, 16)
+    PAYLOAD[32 + byte_range] = num2binary(SEQNO, 8)
+    PAYLOAD[40 + byte_range] = num2binary(LENGTH, 8)
     for k in range(0, MESSAGE.size):
-        PAYLOAD[8 * (4 + k) + byte_range] = num2binary(MESSAGE[k], 8)
+        PAYLOAD[(8 * k + custom_header_length) + byte_range] = num2binary(MESSAGE[k], 8)
 
     if MAC_CRC:
         PAYLOAD[8 * LENGTH + np.arange(0, 16, dtype=np.uint8)] = CRC16(PAYLOAD[0:8 * LENGTH])
@@ -915,7 +867,6 @@ def lora_payload_init(SF, LENGTH, MAC_CRC, CR, n_bits_hdr, DST, SRC, SEQNO, MESS
         W = np.concatenate((W1, W[0:-1]))
 
     return PAYLOAD, n_sym_payload
-
 
 #CRC-16 calculation for LoRa (reverse engineered from a Libelium board)
 def CRC16(bits):
@@ -978,9 +929,7 @@ def CRC16(bits):
     CRC = crc_tmp[np.mod(pos + np.arange(15, -1, -1, dtype=np.int32), 16)]
     return CRC
 
-
 # gray and reversed-gray mappings
-
 def gray_lut(n):
     pow_n = np.power(2, n)
     g = np.zeros(pow_n, dtype=np.uint16)
@@ -997,7 +946,6 @@ def gray_lut(n):
     ig = ig.astype(int)
     g[ig] = np.arange(0, pow_n, dtype=np.uint16)
     return g, ig
-
 
 # function k_payload = \
 def lora_payload(SF, CR, n_sym_payload, PAYLOAD, payload_ofs):
@@ -1055,17 +1003,12 @@ def lora_payload(SF, CR, n_sym_payload, PAYLOAD, payload_ofs):
 
     return k_payload
 
-
-
-
-
 def chirp(f_ini,N,Ts,Df,t0_frac = 0,phi_ini = 0):
     t = (t0_frac+np.arange(0,N, dtype = np.int32))*Ts
     T = N*Ts
     s = np.exp(1j*(phi_ini + 2*np.pi*f_ini*t + np.pi*Df*np.power(t,2)))
     phi_fin = phi_ini + 2*np.pi*f_ini*T + np.pi*Df*np.power(T,2)
     return s, phi_fin
-
 
 def lora_packet_rx(s,SF,BW,OSF,Trise,p_ofs_est,Cfo_est):
     truncated = False
@@ -1114,7 +1057,6 @@ def lora_packet_rx(s,SF,BW,OSF,Trise,p_ofs_est,Cfo_est):
         MAC_CRC_OK = False
         k_payload_est = None
         MSG = None
-
         return k_hdr_est,HDR_FCS_OK,k_payload_est,MAC_CRC_OK,MSG,DST,SRC,SEQNO,CR,HAS_CRC,truncated,ofs
     else:
         n_bits_hdr = (PAYLOAD_bits_hdr.size)
@@ -1152,22 +1094,11 @@ def lora_packet_rx(s,SF,BW,OSF,Trise,p_ofs_est,Cfo_est):
         # 			#fprintf('\\#d',MSG(i))
         return k_hdr_est, HDR_FCS_OK, k_payload_est, MAC_CRC_OK, MSG, DST,SRC,SEQNO, CR,HAS_CRC, truncated,ofs
 
-
-
-
-
-
 def lora_header_decode(SF,k_hdr):
-
     if SF<7:
         FCS_OK = False
         return
-
-
-
-
-
-
+    
     DE_hdr = 1
     PPM = SF-2*DE_hdr
     (_,degray) = gray_lut(PPM)
@@ -1235,22 +1166,16 @@ def lora_header_decode(SF,k_hdr):
 
     return FCS_OK,LENGTH,HAS_CRC,CR,PAYLOAD_bits
 
-
 def num2binary(num,length = 0):
-
     num = np.array([num],dtype=np.uint16)
     num = np.flip(num.view(np.uint8))
     num = np.unpackbits(num)
     return num[-length:]
 
-
-
 def lora_payload_n_sym(SF,LENGTH,MAC_CRC,CR,n_bits_hdr):
-
     # bigger spreading factors (11 and 12) use 2 less bits per symbol
     if SF > 10:
         DE = 1
-
     else:
         DE = 0
     PPM = SF-2*DE
@@ -1260,9 +1185,6 @@ def lora_payload_n_sym(SF,LENGTH,MAC_CRC,CR,n_bits_hdr):
     n_sym_blk = 4+CR
     n_sym_payload = int(n_blk_tot*n_sym_blk)
     return n_sym_payload
-
-
-
 
 def lora_payload_decode(SF,k_payload,PAYLOAD_hdr_bits,HAS_CRC,CR,LENGTH_FROM_HDR):
 
@@ -1341,16 +1263,19 @@ def lora_payload_decode(SF,k_payload,PAYLOAD_hdr_bits,HAS_CRC,CR,LENGTH_FROM_HDR
 
 
 
-    #NOTE HOW THE TOTAL LENGTH IS 4 BYTES + THE PAYLOAD LENGTH
-    #INDEED, THE FIRST 4 BYTES ENCODE DST, SRC, SEQNO AND LENGTH INFOS
-    DST = bit2uint8(PAYLOAD[0:8])
-    SRC = bit2uint8(PAYLOAD[8+np.arange(0,8, dtype = np.int32)])
-    SEQNO = bit2uint8(PAYLOAD[8*2+np.arange(0,8, dtype = np.int32)])
-    LENGTH = bit2uint8(PAYLOAD[8*3+np.arange(0,8, dtype = np.int32)])
+    #NOTE HOW THE TOTAL LENGTH IS custom_header_bytes_length BYTES + THE PAYLOAD LENGTH
+    #INDEED, THE FIRST custom_header_bytes_length BYTES ENCODE DST, SRC, SEQNO AND LENGTH INFOS
+
+    custom_header_bytes_length = 6
+
+    DST = bit2uint16(PAYLOAD[0:16])
+    SRC = bit2uint16(PAYLOAD[16 + np.arange(0,16, dtype = np.int32)])
+    SEQNO = bit2uint8(PAYLOAD[32 + np.arange(0,8, dtype = np.int32)])
+    LENGTH = bit2uint8(PAYLOAD[40 + np.arange(0,8, dtype = np.int32)])
     if (LENGTH == 0):
         LENGTH = LENGTH_FROM_HDR
     
-    MSG_LENGTH = LENGTH-4
+    MSG_LENGTH = LENGTH - custom_header_bytes_length
     if (((LENGTH+2)*8 > len(PAYLOAD) and HAS_CRC) or (LENGTH*8 > len(PAYLOAD) and not (HAS_CRC)) or LENGTH<4):
         MAC_CRC_OK = False
 
@@ -1358,7 +1283,7 @@ def lora_payload_decode(SF,k_payload,PAYLOAD_hdr_bits,HAS_CRC,CR,LENGTH_FROM_HDR
 
     MSG=np.zeros((int(MSG_LENGTH)), dtype = np.uint8)
     for i in range (0,int(MSG_LENGTH)):
-        MSG[i]=bit2uint8(PAYLOAD[8*(4+i)+np.arange(0,8, dtype = np.int32)])
+        MSG[i]=bit2uint8(PAYLOAD[8*(custom_header_bytes_length+i)+np.arange(0,8, dtype = np.int32)])
 
     if not HAS_CRC:
         MAC_CRC_OK = True
@@ -1381,14 +1306,13 @@ def lora_payload_decode(SF,k_payload,PAYLOAD_hdr_bits,HAS_CRC,CR,LENGTH_FROM_HDR
 
     return MAC_CRC_OK,DST,SRC,SEQNO,MSG,HAS_CRC
 
-
-
-
 def bit2uint8(bits):
     return np.packbits(bits, bitorder='little')[0]
 
-
-
+def bit2uint16(bits):
+    byte_array = np.packbits(bits, bitorder='little')
+    uint16_value = np.frombuffer(byte_array, dtype=np.uint16)[0]
+    return uint16_value
 
 # LoRa preamble (reverse engineered from a real signal, is actually different from the one described in the patent)
 def lora_preamble(n_preamble, k1, k2, BW, K, OSF, t0_frac=0, phi0=0):
@@ -1418,12 +1342,40 @@ def lora_chirp(mu, k, BW, K, OSF, t0_frac=0, phi0=0):
         (s, phi) = chirp(-mu * BW / 2, K * OSF, Ts, Df, t0_frac, phi0)
     return s, phi
 
+
+
+class QualityParameters:
+    def __init__(self):
+        self.noise_power = 0
+        self.noise_samples = 0
+    
+    def calculate_power(samples):
+        return np.abs(samples)**2
+
+    @staticmethod
+    def calculate_mean_power(samples):
+        return np.mean(QualityParameters.calculate_power(samples))
+
+    @staticmethod
+    def calculate_snr(samples, noise):
+        samples_power = QualityParameters.calculate_mean_power(samples)
+        noise_power = QualityParameters.calculate_mean_power(noise)
+        return 10 * np.log10(samples_power / noise_power)
+    
+    def update_noise(noise):
+        noise_power = QualityParameters.calculate_mean_power(noise)
+        
+
+    @staticmethod
+    def calculate_rssi(samples):
+        samples_power = QualityParameters.calculate_mean_power(samples)
+        return 10 * np.log10(samples_power)
+
+
 def samples_decoding(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
 
     max_packets = int(np.ceil(Ts * s.size / min_time_lora_packet))
     pack_array = np.empty(shape=(max_packets,), dtype=LoRaPacket)
-
-
 
     OSF = int(OSF)
     N = int(N)
@@ -1432,9 +1384,6 @@ def samples_decoding(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
     cumulative_index = 0
     last_index = 0
     received = 0
-
-
-
 
     while True:
         if s.size < N:
@@ -1448,13 +1397,12 @@ def samples_decoding(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
             break
 
         if(success):
-            # print("success")
-            # print(payload)
-            # print("message","".join([chr(int(item)) for item in payload]))
-            # print("FCS Check", HDR_FCS_OK)
-            # print("MAC CRC",MAC_CRC_OK)
-            # print("PAYLOAD LENGTH", len(payload))
-            pack_array[received] = LoRaPacket(payload,SRC,DST,SEQNO,HDR_FCS_OK,HAS_CRC,MAC_CRC_OK,CR,0,SF,BW)
+            print(f"CI:{cumulative_index}, LI: {last_index}, O: {offset}, S: {s.size}") if PRINT_DEBUG else None
+            print(f"CI:{cumulative_index}, LI: {last_index}, O: {offset}, N: {N}, OSF: {OSF}, NRISe: {Nrise}, SF: {SF}, TRISE: {Trise}")
+            
+            #rssi = calculate_rssi(s[cumulative_index:])
+            #snr = calculate_snr(s[cumulative_index:])
+            pack_array[received] = LoRaPacket(payload,SRC,DST,SEQNO,HDR_FCS_OK,HAS_CRC,MAC_CRC_OK,CR,0,SF,BW, 0, 0)
             received = received + 1
 
 
@@ -1470,10 +1418,6 @@ def samples_decoding(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
             else:
                 cumulative_index = cumulative_index + last_index + 28 * N
     return pack_array[:received]
-
-
-
-
 
 def rf_decode(s,BW,N,Ts,K,OSF,Nrise,SF,Trise):
     truncated = False
@@ -1663,7 +1607,6 @@ def complex_lora_packet(K, n_pr, IH, CR, MAC_CRC, SRC, DST, SEQNO, BW, OSF, SF, 
     return s
 
 
-
 #ENCODER FUNCTION. GIVEN A PAYLOAD (IN BYTES), AND THE INTENDED TRANSMISSION PARAMETERS, GENERATES THE SAMPLES FOR THE CORRESPONDING LORA PACKET
 def encode(f0, SF, BW, payload, fs, src, dst, seqn, cr=1, enable_crc=1, implicit_header=0, preamble_bits=8):
 
@@ -1694,10 +1637,10 @@ def decode(complex_samples,SF, BW, fs):
 
 #CLASS TO CONVENIENTLY ENCAPSULATE LORA PACKETS
 class LoRaPacket:
-    def __init__(self,payload,src,dst,seqn,hdr_ok,has_crc,crc_ok,cr,ih,SF,BW):
+    def __init__(self,payload,src,dst,seqn,hdr_ok,has_crc,crc_ok,cr,ih,SF,BW, rssi, snr):
         self.payload = payload
-        self.src = np.uint8(src)
-        self.dst = np.uint8(dst)
+        self.src = np.uint16(src)
+        self.dst = np.uint16(dst)
         self.seqn = np.uint8(seqn)
         self.hdr_ok = np.uint8(hdr_ok)
         self.has_crc = np.uint8(has_crc)
@@ -1706,22 +1649,22 @@ class LoRaPacket:
         self.ih = np.uint8(ih)
         self.SF = np.uint8(SF)
         self.BW = BW
+        self.rssi = rssi
+        self.snr = snr
 
     def __eq__(self, other):
-        payload_eq = np.all(self.payload == other.payload)
-        src_eq = (self.src == other.src)
-        dst_eq = (self.dst == other.dst)
-        seqn_eq = (self.seqn == other.seqn)
-        hdr_ok_eq  = (self.hdr_ok == other.hdr_ok)
-        has_crc_eq = (self.has_crc == other.has_crc)
-        crc_ok_eq = (self.crc_ok == other.crc_ok)
-        cr_eq = (self.cr == other.cr)
-        ih_eq = (self.ih == other.ih)
-        SF_eq = (self.SF == other.SF)
-        BW_eq = (self.BW == other.BW)
-
-        return payload_eq and src_eq and dst_eq and seqn_eq and hdr_ok_eq and has_crc_eq and crc_ok_eq and cr_eq and ih_eq and SF_eq and BW_eq
-
+        return np.all(self.payload == other.payload) and \
+                     (self.src == other.src) and \
+                     (self.dst == other.dst) and \
+                     (self.seqn == other.seqn) and \
+                     (self.hdr_ok == other.hdr_ok) and \
+                     (self.has_crc == other.has_crc) and \
+                     (self.crc_ok == other.crc_ok) and \
+                     (self.cr == other.cr) and \
+                     (self.ih == other.ih) and \
+                     (self.SF == other.SF) and \
+                     (self.BW == other.BW)
+        
     def __repr__(self):
         desc = "LoRa Packet Info:\n"
         sf_desc = "Spreading Factor: " + str(self.SF) + "\n"
@@ -1769,6 +1712,10 @@ class LoRaPacket:
                     pl_len = "Payload Length: " + str(self.payload.size) + "\n"
                     return desc + sf_desc + bw_desc + hdr_chk + ih_desc + src_desc + dest_desc + seq_desc + cr_desc + crc_check + pl_len + pl_str
 
+############### END LORA.PY #########################
+
+
+############### START LORA_HIGHER_LEVEL.PY #########################
 
 def packet_receiver(pkt_queue: mp.Queue, packets, sf, filterID=None, tmt=None):
     print("Started receiver for sf", sf, "and timeout", tmt)
@@ -1785,24 +1732,29 @@ def packet_receiver(pkt_queue: mp.Queue, packets, sf, filterID=None, tmt=None):
                 packets.put_nowait((sf,pkt))
                 return
 
-def buffered_packet_receiver(pkt_queue, packets_map, sf):
+def buffered_packet_receiver(pkt_queue, packets_map, sf, history_map, history_lock):
     print("Started receiver for sf", sf)
     while True:
         pkt = pkt_queue.get()
         if isinstance(pkt, LoRaPacket):
-            print(f"####### Received packet on sf {sf} {pkt.payload} #######")
-            if packets_map[str(sf)][str(pkt.dst)] == None:
-                packets_map[str(sf)][str(pkt.dst)] = mp.Queue(0)
-            packets_map[str(sf)][str(pkt.dst)].put_nowait((sf,pkt))
+            #print(f"####### Received packet on sf {sf} {pkt.payload} #######")
+            if str(pkt.dst) in packets_map[str(sf)]:
+                with history_lock:
+                    #if pkt.payload not in history_map[str(pkt.dst)]: 
+                    if not any(np.array_equal(pkt.payload, packet) for packet in history_map[str(pkt.dst)]):
+                        history_map[str(pkt.dst)].append(pkt.payload)
+                        packets_map[str(sf)][str(pkt.dst)].put_nowait((sf,pkt))
+                #print(f"Inserted in sf {sf} queue for {str(pkt.dst)}")
+                #packets_map[str(sf)][str(pkt.dst)] = mp.Queue(0)
+            #else:
+            #    print(f"Received from {str(pkt.dst)} but not registered")
 
 def LoRaBufferedBuilder(address, rx_gain, tx_gain, bandwidth, rx_freq, tx_freq, sample_rate, rx_ch_ID, tx_ch_ID, spreading_factor):
     lora_radio = lora_transceiver(address, rx_gain, tx_gain, bandwidth, rx_freq, tx_freq, sample_rate,
                                             rx_ch_ID, tx_ch_ID)
-    
-    rx_queues = lora_radio.rx_start([spreading_factor])
+    rx_queues = lora_radio.rx_start([7], block_size=2400)
     tx_queue = lora_radio.tx_start(1)
-    return (LoRaSender(lora_radio, tx_queue, spreading_factor, bandwidth), LoRaBufferedReceiver(lora_radio, rx_queues, [spreading_factor]))
-
+    return (LoRaSender(lora_radio, tx_queue, spreading_factor, bandwidth), LoRaBufferedReceiver(lora_radio, rx_queues, [7]))
 
 class LoRaSender:
     def __init__(self, radio, tx_queue, spreading_factor, bandwidth):
@@ -1811,48 +1763,95 @@ class LoRaSender:
         self.tx_queue = tx_queue
         self.bandwidth = bandwidth
 
+    def change_radio_settings(self, spreading_factor, bandwidth):
+        #TODO implement these changes
+        self.usrp.set_rx_rate
+        self.usrp.set_rx_freq
+        self.usrp.set_rx_gain
+        self.usrp.set_rx_bandwidth
+        self.usrp.get_rx_stream
+        self.usrp.set_tx_rate
+        self.usrp.set_tx_freq
+        self.usrp.set_tx_gain
+
     def send_radio(self, data_array, src_id, dest_id):
         CR = 1
         data_array = np.array(data_array, dtype=np.uint8)
         pack = LoRaPacket(data_array, src_id, dest_id, seqn=0, hdr_ok=1, has_crc=1, crc_ok=1,
-                                            cr=CR, ih=0, SF=self.spreading_factor, BW=self.bandwidth)
+                                            cr=CR, ih=0, SF=self.spreading_factor, BW=self.bandwidth, rssi=0, snr=0)
 
         #data = pack_lora_data(data_array, self.spreading_factor, self.bandwidth, pack_size, self.id, dest_id, False, CR)
         self.tx_queue.put_nowait(pack)
-        print("Put data in the queue - 2")
         return
+
+
+MAXLEN_DEQUE = 5
 
 class LoRaBufferedReceiver:
     def __init__(self, radio, rx_queues, sf_list):
         self.lora_radio = radio
         self.rx_queues = rx_queues
         self.sf_list = sf_list
-        self.packets_map = {}
+        self.packets_map = {}  # {sf: {d_id: queue}} -> queue is used to store messages received from a device and share it between threads
+        self.history_map = {}  # {d_id: [packets]} -> used to store the last received packets for each device
+        self.history_lock = threading.Lock() # to access history_map
 
+        self.history_map["0"] = deque(maxlen=MAXLEN_DEQUE)
         for i in range(len(sf_list)):
             self.packets_map[str(sf_list[i])] = {}
-            for j in range(0,256):
-                self.packets_map[str(sf_list[i])][str(j)] = mp.Queue(0)
-            child = threading.Thread(target=buffered_packet_receiver, args=(self.rx_queues[i], self.packets_map, sf_list[i]))
+            self.packets_map[str(self.sf_list[i])]["0"] = mp.Queue(0) #0 is the d_id reserved for network servers and used as destination by devices, like a broadcast address
+
+            child = threading.Thread(target=buffered_packet_receiver, args=(self.rx_queues[i], self.packets_map, sf_list[i], self.history_map, self.history_lock))
             child.start()
-        print("After creating packet_receiver")
+
+    def change_radio_settings(self, spreading_factor, bandwidth):
+        #TODO implement these changes
+        self.usrp.set_rx_rate
+        self.usrp.set_rx_freq
+        self.usrp.set_rx_gain
+        self.usrp.set_rx_bandwidth
+        self.usrp.get_rx_stream
+        self.usrp.set_tx_rate
+        self.usrp.set_tx_freq
+        self.usrp.set_tx_gain
+
+    def register_device_id(self, d_id):
+        for sf in self.sf_list:
+            self.packets_map[str(sf)][str(d_id)] = mp.Queue(0)
+        self.history_map[str(d_id)] = deque(maxlen=MAXLEN_DEQUE)
+
+    @staticmethod
+    def recv_handler(q,tmt, outlist, d_id, mutex):
+        #print(f"tmt {tmt}")
+        try:
+            p = q.get(timeout=tmt)
+            #print(f"Recv handler {d_id}, received packet")
+            with mutex:
+                outlist.append(p)
+            #print(f"Recv handler {d_id}, inserted into output_queue")
+        except queue.Empty:
+            #print(f"Recv handler {d_id}, received nothing")
+            pass
 
     def recv_radio(self, sf_recv_list, d_id, tmt=None):
         packets = []
-
+        mutex = threading.Lock()
+        handlers = []
+        #for sf in sf_recv_list:
+        #    if str(sf) not in self.packets_map:
+        #        self.packets_map[str(sf)] = {}
+                #for j in range(0,256):
+                #    self.packets_map[str(sf)][str(j)] = mp.Queue(0)
+        
         for sf in sf_recv_list:
-            if str(sf) not in self.packets_map:
-                self.packets_map[str(sf)] = {}
-                for j in range(0,256):
-                    self.packets_map[str(sf)][str(j)] = mp.Queue(0)
+            if str(d_id) in self.packets_map[str(sf)]:
+                q = self.packets_map[str(sf)][str(d_id)]
+                c = threading.Thread(target=self.recv_handler, args=(q, tmt, packets, d_id, mutex))
+                c.start()
+                handlers.append(c)
 
-        for sf in sf_recv_list:
-            q = self.packets_map[str(sf)][str(d_id)]
-            try:
-                p = q.get(timeout=tmt)
-                packets.append(p)
-            except queue.Empty:
-                pass
+        for h in handlers:
+            h.join()
         return packets
 
 def receiver_routine():
@@ -1869,17 +1868,34 @@ def receiver_routine():
     rx_ch_ID = 0
 
     sf = 7
-    dev_id = 0
+    
+    dev_id = 30000
+
+    counter = 0
+    #dest_id = 20000
 
     (_, receiver) = LoRaBufferedBuilder(address, rx_gain, tx_gain, bandwidth, rx_freq, tx_freq, sample_rate, rx_ch_ID, tx_ch_ID, sf)
+    receiver.register_device_id(dev_id)
     while True:
-        packets = receiver.recv_radio([7], 5)
-        print("packets", packets)
+        packets = receiver.recv_radio([7], dev_id)
         try:
-            for pack in packets:
-                print(pack)
+            for (sf, pack) in packets:
+                counter += 1
+                print(f"[{int(datetime.datetime.now().timestamp())}] Received {counter} packet {pack.payload} from {pack.src} to {pack.dst}")
         except queue.Empty:
             print("No packet received")
+
+
+
+def t_routine(sender, dev_id, dest_id, mutex):
+    dev_id = random.randint(0, 65535)
+    for i in range(0,400):
+        content = [(dev_id >> 8 & 0b11111111), (dev_id & 0b11111111), i]
+        print(f"[{int(datetime.datetime.now().timestamp())}] TRANSMITTING PACKET {content} from {dev_id} to {dest_id}")
+        with mutex:
+            sender.send_radio(content, dev_id, dest_id)
+        sleep(10)
+
 
 def transmitter_routine():
     address = "192.168.40.2"
@@ -1895,13 +1911,29 @@ def transmitter_routine():
     rx_ch_ID = 1
 
     sf = 7
-    dev_id = 0
+    
+    dev_id = 20000
+    dest_id = 30000
 
     (sender, _) = LoRaBufferedBuilder(address, rx_gain, tx_gain, bandwidth, rx_freq, tx_freq, sample_rate, rx_ch_ID, tx_ch_ID, sf)
-    
+
+    handlers = []
+    mutex = threading.Lock()
+
+
     for i in range(0,10):
-        sender.send_radio([i, i, i, i, i], 0)
-        sleep(10)
+        h = mp.Process(target=t_routine, args=(sender, dev_id, dest_id, mutex))
+        h.start()
+        handlers.append(h)
+
+    #for i in range(0,10):
+    #    content = [i, i, i, i, i]
+    #    print(f"[{datetime.datetime.now().timestamp()}] TRANSMITTING PACKET {content} from {dev_id} to {dest_id}")
+    #    sender.send_radio([i, i, i, i, i], dev_id, dest_id)
+    #    sleep(10)
+
+    for h in handlers:
+        h.join()
 
 def main():
     if sys.argv[1] == 'tx':
@@ -1913,6 +1945,7 @@ if __name__ == "__main__":
     main()
 
 
+############### END LORA_HIGHER_LEVEL.PY #########################
 
 
 '''

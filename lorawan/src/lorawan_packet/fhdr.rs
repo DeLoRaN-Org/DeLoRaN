@@ -1,13 +1,14 @@
 use std::convert::TryInto;
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
-    device::Device,
-    utils::{errors::LoRaWANError, traits::{ToBytes, ToBytesWithContext}}, encryption::aes_128_encrypt_with_padding,
+    device::Device, encryption::aes_128_encrypt, utils::{errors::LoRaWANError, traits::{ToBytes, ToBytesWithContext}}
 };
 
 use super::fctrl::FCtrl;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 //7 to 22 bytes
 pub struct FHDR {
     dev_addr: [u8; 4],
@@ -75,7 +76,7 @@ impl FHDR {
         } else { 
             (1, session_context.network_context().nf_cnt_dwn().to_le_bytes())
         };
-        let mut block = vec![
+        let block = [
             0x1,
             0, 0, 0, 0,
             direction_byte,
@@ -83,7 +84,7 @@ impl FHDR {
             counter_bytes[0], counter_bytes[1], counter_bytes[2], counter_bytes[3],
             0, 0
         ];
-        let xor_block = aes_128_encrypt_with_padding(session_context.network_context().nwk_s_enc_key(), &mut block)?;
+        let xor_block = aes_128_encrypt(session_context.network_context().nwk_s_enc_key(), &block)?;
         let (fopts_used, _) = fopts.split_at(f_opts_len);
     
         Ok(fopts_used.iter().zip(xor_block).map(|(v1,v2)| {
@@ -99,6 +100,14 @@ impl FHDR {
         else {
             let mut dev_addr: [u8; 4] = bytes[0..4].try_into()?;
             dev_addr.reverse();
+
+            if let Some(dev) = device_context {
+                if let Some(session) = dev.session() {
+                    if session.network_context().dev_addr() != &dev_addr {
+                        return Err(LoRaWANError::InvalidDevAddr);
+                    }
+                }
+            }
 
             let fctrl = FCtrl::from_bytes(bytes[4], is_uplink);
             let fcnt: u16 = u16::from_le_bytes(bytes[5..7].try_into()?);

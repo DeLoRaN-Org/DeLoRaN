@@ -175,7 +175,7 @@ mod tests {
         let join_accept = LoRaWANPacket::from_bytes(&packet, Some(&device), false).unwrap();
 
         if let Payload::JoinAccept(ja) = join_accept.payload() {
-            if let Err(e) = device.derive_session_context(ja) {
+            if let Err(e) = device.generate_session_context(ja) {
                 match e {
                     LoRaWANError::SessionContextMissing => panic!("Missing JoinRequest context"),
                     LoRaWANError::OpenSSLErrorStack(e) => panic!("{}", e),
@@ -235,6 +235,8 @@ mod tests {
         packet.set_payload(Payload::MACPayload(payload));
 
         let buffer = packet.to_bytes_with_context(&device).unwrap();
+
+        println!("{}", serde_json::to_string_pretty(&packet).unwrap());
 
         println!("{}", PrettyHexSlice(&buffer));
     }
@@ -302,10 +304,12 @@ mod tests {
         let packet = LoRaWANPacket::new(mhdr, Payload::JoinAccept(join_accept));
 
         if let Payload::JoinAccept(ja_payload) = packet.payload() {
-            device.derive_session_context(ja_payload).unwrap();
+            device.generate_session_context(ja_payload).unwrap();
         };
 
         println!("{device}");
+
+        println!("{}", serde_json::to_string_pretty(&packet).unwrap());
 
         let packet_bytes = packet.to_bytes_with_context(&device);
 
@@ -330,6 +334,10 @@ mod tests {
             device.dev_nonce_autoinc() as u16,
         );
         let packet = LoRaWANPacket::new(mhdr, Payload::JoinRequest(payload));
+
+        println!("{}", serde_json::to_string_pretty(&packet).unwrap());
+
+
         let content = packet.to_bytes_with_context(&device).unwrap();
 
         println!("{}", PrettyHexSlice(&content));
@@ -450,7 +458,7 @@ mod tests {
         });
         let fhdr = FHDR::new(*session.network_context().dev_addr(), fctrl);
 
-        let list = vec![
+        let list = [
             EDMacCommands::ResetInd(1),
             EDMacCommands::DeviceTimeReq,
             EDMacCommands::RXParamSetupAns {
@@ -501,7 +509,7 @@ mod tests {
         });
         let fhdr = FHDR::new(*session.network_context().dev_addr(), fctrl);
 
-        let list = vec![NCMacCommands::NewChannelReq {
+        let list = [NCMacCommands::NewChannelReq {
             ch_index: 1,
             freq: 878000,
             max_dr: 3,
@@ -671,7 +679,7 @@ mod tests {
 
     #[test]
     fn from_bytes_edcommands() {
-        let _list = vec![
+        let _list = [
             EDMacCommands::ResetInd(1),
             EDMacCommands::DeviceTimeReq,
             EDMacCommands::RXParamSetupAns {
@@ -717,7 +725,7 @@ mod tests {
         match packet.payload() {
             Payload::JoinRequest(_jr) => todo!(),
             Payload::JoinAccept(ja) => {
-                device.derive_session_context(ja).unwrap();
+                device.generate_session_context(ja).unwrap();
                 println!("{device}")
             },
             Payload::RejoinRequest(_rj) => todo!(),
