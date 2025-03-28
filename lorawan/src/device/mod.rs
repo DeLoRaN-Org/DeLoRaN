@@ -202,10 +202,10 @@ impl Device {
         &self.join_eui
     }
 
-    /// Get a reference to the device's proprietary payload.
-    //pub fn proprietary_payload_handlers(&self) -> Option<&ProprietaryPayloadHandlers> {
-    //    self.proprietary_payload_handlers.as_ref()
-    //}
+    /*  Get a reference to the device's proprietary payload.
+    pub fn proprietary_payload_handlers(&self) -> Option<&ProprietaryPayloadHandlers> {
+        self.proprietary_payload_handlers.as_ref()
+    }*/
 
     pub fn is_initialized(&self) -> bool {
         self.session.is_some()
@@ -270,9 +270,9 @@ impl Device {
     }
     
     pub fn create_maccommands(&mut self, mac_commands: &[EDMacCommands]) -> Result<Vec<u8>, LoRaWANError> {        
-        return Ok(mac_commands.iter()
+        Ok(mac_commands.iter()
             .map(|e| e.to_bytes())
-            .reduce(|mut acc, curr| {acc.extend(&curr); acc}).unwrap());
+            .reduce(|mut acc, curr| {acc.extend(&curr); acc}).unwrap())
     }
 }
 

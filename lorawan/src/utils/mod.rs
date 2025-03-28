@@ -57,7 +57,7 @@ pub fn increment_nonce(received_nonce: u16, current_nonce: u32, nonce_looped: bo
 #[derive(PartialEq, Eq, Debug)]
 pub struct PrettyHexSlice<'a>(pub &'a [u8]);
 
-impl<'a> Display for PrettyHexSlice<'a> {
+impl Display for PrettyHexSlice<'_> {
     /// Formats the slice of bytes as a pretty hexadecimal string.
     ///
     /// # Arguments

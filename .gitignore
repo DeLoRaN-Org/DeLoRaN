@@ -16,3 +16,4 @@ Cargo.lock
 
 node_modules
 cpu_mem_*
+*.csv

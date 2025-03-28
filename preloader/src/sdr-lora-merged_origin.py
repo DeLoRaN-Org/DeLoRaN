@@ -2,7 +2,7 @@ import threading
 import numpy as np
 #import queue as Queue
 import time
-import uhd
+import uhd # type: ignore
 import multiprocessing as mp
 import multiprocessing.shared_memory as shared_memory
 import multiprocessing.queues as mp_queues

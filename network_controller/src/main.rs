@@ -1,17 +1,14 @@
-use std::{fs, net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4}};
+use std::fs;
 
-use blockchain_api::{exec_bridge::{BlockchainExeClient, BlockchainExeConfig}, udp_bridge::Logger};
+use blockchain_api::udp_bridge::Logger;
 use clap::Parser;
-use consensus::{consensus_server::ConsensusConfig, ConsensusCerts};
 use lazy_static::lazy_static;
-use lorawan::{
-    physical_parameters::{CodeRate, DataRate, LoRaBandwidth, SpreadingFactor},
-    regional_parameters::region::Region,
-};
-use lorawan_device::{configs::{ColosseumDeviceConfig, RadioDeviceConfig, UDPNCConfig}, devices::radio_device::RadioCommunicator};
+use lorawan::
+    physical_parameters::SpreadingFactor
+;
 
-use nalgebra::{DMatrix, DVector};
-use network_controller::modules::{anomaly_detector_mahalanobis::AnomalyDetectorMahalnobis, network_controller::NetworkController};
+use nalgebra::DVector;
+use network_controller::modules::anomaly_detector_mahalanobis::AnomalyDetectorMahalnobis;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -123,7 +120,7 @@ fn test_real_data(threshold: f64) -> (f32, f32, f32, f32) {
         //Time,DeviceAddress,GatewayNode,FrequencyHz,SF,BW,RSSI,SNR,Distance,Jammer
         //1.22171,6c00079d,202,868300000,9,125000,-128.173,-11.1419,3770.55,0
 
-        let time = values[0].parse::<f32>().unwrap() as u128;
+        let _time = values[0].parse::<f32>().unwrap() as u128;
         let frequency = values[3].parse::<f64>().unwrap();
         let sf = SpreadingFactor::new(values[4].parse::<u8>().unwrap());
         //let bw = LoRaBandwidth::from(values[5].parse::<f32>().unwrap());
@@ -164,7 +161,7 @@ fn test_real_data(threshold: f64) -> (f32, f32, f32, f32) {
         let values = row.split(',').collect::<Vec<&str>>();
         //println!("{values:?}");
 
-        let time = values[0].parse::<f32>().unwrap() as u128;
+        let _time = values[0].parse::<f32>().unwrap() as u128;
         let frequency = values[3].parse::<f64>().unwrap();
         let sf = SpreadingFactor::new(values[4].parse::<u8>().unwrap());
         //let bw = LoRaBandwidth::from(values[5].parse::<f32>().unwrap());
