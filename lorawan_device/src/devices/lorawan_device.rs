@@ -153,7 +153,7 @@ impl<T> LoRaWANDevice<T> where T: LoRaWANCommunicator + Send + Sync {
     }
     
     pub async fn send_maccommands(&mut self, mac_commands: &[EDMacCommands], confirmed: bool) -> Result<(), CommunicatorError> {        
-        let content: Vec<u8> = self.device.create_maccommands(mac_commands)?;
+        let content = Device::create_maccommands(mac_commands)?;
         let uplink = self.device.create_uplink(Some(&content), confirmed, Some(0), None)?;
         self.communicator.send(&uplink, Some(*self.dev_eui()), None).await
     }

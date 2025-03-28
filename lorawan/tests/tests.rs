@@ -85,6 +85,58 @@ mod tests {
         device
     }
 
+
+    #[test]
+    fn create_uplink() {
+        let mut device = Device::new(
+            DeviceClass::A,
+            None,
+            EUI64::from_hex("108af6c099199c36").unwrap(),
+            EUI64::from_hex("0000000000000000").unwrap(),
+            Key::from_hex("29342b15663eded9f227a3a4bb17b5b6").unwrap(),
+            Key::from_hex("29342b15663eded9f227a3a4bb17b5b6").unwrap(),
+            LoRaWANVersion::V1_0,
+        );
+
+        let network_context = NetworkSessionContext::new(
+            Key::from_hex("112e976de52938b1cb9289ff20ec0c41").unwrap(),
+            Key::from_hex("112e976de52938b1cb9289ff20ec0c41").unwrap(),
+            Key::from_hex("112e976de52938b1cb9289ff20ec0c41").unwrap(),
+            [0x60, 0x00, 0x08],
+            [0x00, 0xb6, 0x26, 0x9a],
+            7,
+            1,
+            0,
+        );
+
+        let application_context = ApplicationSessionContext::new(
+            Key::from_hex("ec056e33fe1c51ca57eed9dd61c25043").unwrap(),
+            7,
+        );
+
+        device.set_activation_abp(SessionContext::new(application_context, network_context));
+        
+
+        device.set_dev_nonce(7);
+        
+        let mac_commands = [
+            EDMacCommands::LinkCheckReq,
+            EDMacCommands::DeviceTimeReq,
+        ];
+
+        let payload = Device::create_maccommands(&mac_commands).unwrap(); 
+
+        let uplink = device.create_uplink(Some(&payload), true, Some(0), None).unwrap();
+
+        println!("{uplink:?}");
+    }
+
+    /*
+[128, 154, 38, 182, 0,   0, 0, 0, 10, 150,  40,  65, 244, 128]
+[128, 154, 38, 182, 0, 160, 7, 0,  0,  59, 178, 100, 2  , 17]
+*/
+
+
     #[test]
     fn cmac() {
         let key = Key::from([

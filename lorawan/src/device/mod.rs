@@ -251,7 +251,7 @@ impl Device {
         });
         
         let session_context = self.session.as_mut().ok_or(LoRaWANError::SessionContextMissing)?;
-        let fctrl = FCtrl::Uplink(UplinkFCtrl::new(true, false, true, false, f_opts_len));
+        let fctrl = FCtrl::Uplink(UplinkFCtrl::new(false, false, false, false, f_opts_len));
         let fcnt = session_context.network_context_mut().f_cnt_up_autoinc() as u16;
         
         let mut fhdr = FHDR::new(*self.session.as_ref().ok_or(LoRaWANError::SessionContextMissing)?.network_context().dev_addr(), fctrl);
@@ -269,7 +269,7 @@ impl Device {
         packet.to_bytes_with_context(self)
     }
     
-    pub fn create_maccommands(&mut self, mac_commands: &[EDMacCommands]) -> Result<Vec<u8>, LoRaWANError> {        
+    pub fn create_maccommands(mac_commands: &[EDMacCommands]) -> Result<Vec<u8>, LoRaWANError> {        
         Ok(mac_commands.iter()
             .map(|e| e.to_bytes())
             .reduce(|mut acc, curr| {acc.extend(&curr); acc}).unwrap())
